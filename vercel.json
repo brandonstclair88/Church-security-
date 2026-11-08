@@ -1,0 +1,9 @@
+{
+  "crons": [{ "path": "/api/keepalive", "schedule": "17 15 * * *" }],
+  "headers": [
+    { "source": "/(.*)", "headers": [
+      { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+      { "key": "Referrer-Policy", "value": "same-origin" }
+    ] }
+  ]
+}

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sunday Security Roster</title>
+<meta name="theme-color" content="#2B5C4C">
+<meta name="robots" content="noindex,nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Security">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>Sunday Security</h1><span class="ch">TEAM CH 11 · KIDS CH 10</span></div>
+    <nav class="tabs" id="tabs" aria-label="Sections" hidden>
+      <button data-act="tab" data-v="sunday">Sunday</button>
+      <button data-act="tab" data-v="roster">Roster</button>
+      <button data-act="tab" data-v="posts">Posts</button>
+      <button data-act="tab" data-v="history">History</button>
+    </nav>
+  </div>
+</header>
+<main class="wrap" id="view"><p class="muted">Loading roster…</p></main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-back" data-act="close"></div>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-head"><h2 id="sheet-title"></h2><button class="icon-btn" data-act="close" aria-label="Close">×</button></div>
+    <div id="sheet-body" style="display:grid;gap:14px"></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
