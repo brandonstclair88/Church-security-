@@ -52,3 +52,17 @@ exception when duplicate_object then null; end $$;
 -- 6. First admin (you).
 insert into public.allowed_emails (email, role) values ('brandonst.clair88@gmail.com', 'admin')
 on conflict (email) do update set role = 'admin';
+
+-- 7. Only approved emails can create an account.
+create or replace function public.only_approved_signups() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.allowed_emails where email = lower(new.email)) then
+    raise exception 'Email not approved for this app';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists only_approved_signups on auth.users;
+create trigger only_approved_signups before insert on auth.users
+for each row execute function public.only_approved_signups();

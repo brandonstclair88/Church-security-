@@ -18,36 +18,92 @@ if (!URL_ || !KEY) {
 
   const signOut = async () => { await supabase.auth.signOut(); location.replace(location.origin); };
 
-  function showSignIn(sentTo) {
-    gate(`
-      <h2 class="sec">Sign in</h2>
-      <p class="muted small" style="margin:0">Only approved emails can open the roster.</p>
-      <form id="si-form" style="display:grid;gap:10px">
-        <label class="field"><span>Email</span><input type="text" id="si-email" inputmode="email" autocomplete="email" autocapitalize="none" value="${esc(sentTo || '')}" required></label>
-        <button class="btn primary" type="submit">${sentTo ? 'Resend sign-in email' : 'Email me a sign-in link'}</button>
-      </form>
-      ${sentTo ? `
-      <p class="okline" style="margin:0">Check ${esc(sentTo)} and tap the link. Open it on this device.</p>
-      <form id="si-code" style="display:grid;gap:10px">
-        <label class="field"><span>Or enter the code from the email</span><input type="text" id="si-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></label>
-        <button class="btn" type="submit">Sign in with code</button>
-      </form>` : ''}`);
-    document.getElementById('si-form').onsubmit = async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('si-email').value.trim().toLowerCase();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Enter a valid email.'); return; }
-      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin, shouldCreateUser: true } });
-      if (error) { toast(/rate|security purposes/i.test(error.message) ? 'Too many emails. Wait a minute and try again.' : 'Couldn’t send the email: ' + (error.message || error.status || 'unknown error')); return; }
-      showSignIn(email);
-    };
-    const codeForm = document.getElementById('si-code');
-    if (codeForm) codeForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const token = document.getElementById('si-otp').value.trim();
-      const { error } = await supabase.auth.verifyOtp({ email: sentTo, token, type: 'email' });
-      if (error) toast('That code didn’t work. Use the newest email.');
-    };
+  const validEmail = (e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
+  function authError(error) {
+    const m = String((error && error.message) || '');
+    if (/Database error saving new user|not approved/i.test(m)) return 'That email isn’t approved yet. Ask an admin to add it under Roster → App access.';
+    if (/Invalid login credentials/i.test(m)) return 'Wrong email or password. First time here? Tap “Create your password.”';
+    if (/Email not confirmed/i.test(m)) return 'Confirm your email first. Check your inbox for the confirmation link.';
+    if (/already registered|already been registered/i.test(m)) return 'That email already has a password. Sign in, or tap “Forgot password?”';
+    if (/rate|security purposes/i.test(m)) return 'Too many tries. Wait a minute and try again.';
+    if (/Password should be/i.test(m)) return 'Use a longer password (at least 8 characters).';
+    return 'Something went wrong: ' + (m || 'unknown error');
   }
+  const emailField = (v) => `<label class="field"><span>Email</span><input type="text" id="si-email" inputmode="email" autocomplete="username" autocapitalize="none" value="${esc(v || '')}"></label>`;
+  const links = (items) => `<div class="actions" style="justify-content:space-between">${items.map(([m, t]) => `<button class="req-btn" type="button" data-mode="${m}">${t}</button>`).join('')}</div>`;
+  function bindLinks() { view.querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => showSignIn(b.dataset.mode, (document.getElementById('si-email') || {}).value); }); }
+
+  function showSignIn(mode = 'signin', email = '', note = '') {
+    const noteHtml = note ? `<p class="okline" style="margin:0">${esc(note)}</p>` : '';
+    if (mode === 'signin') {
+      gate(`<h2 class="sec">Sign in</h2>${noteHtml}
+        <form id="si-form" style="display:grid;gap:10px">${emailField(email)}
+          <label class="field"><span>Password</span><input type="password" id="si-pw" autocomplete="current-password"></label>
+          <button class="btn primary" type="submit">Sign in</button></form>
+        ${links([['create', 'First time? Create your password'], ['forgot', 'Forgot password?']])}`);
+      bindLinks();
+      document.getElementById('si-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const em = document.getElementById('si-email').value.trim().toLowerCase(), pw = document.getElementById('si-pw').value;
+        if (!validEmail(em) || !pw) { toast('Enter your email and password.'); return; }
+        const { error } = await supabase.auth.signInWithPassword({ email: em, password: pw });
+        if (error) toast(authError(error));
+      };
+    } else if (mode === 'create') {
+      gate(`<h2 class="sec">Create your password</h2>
+        <p class="muted small" style="margin:0">Your email must already be on the team’s approved list.</p>
+        <form id="si-form" style="display:grid;gap:10px">${emailField(email)}
+          <label class="field"><span>New password (8+ characters)</span><input type="password" id="si-pw" autocomplete="new-password"></label>
+          <label class="field"><span>Confirm password</span><input type="password" id="si-pw2" autocomplete="new-password"></label>
+          <button class="btn primary" type="submit">Create account</button></form>
+        ${links([['signin', 'Back to sign in']])}`);
+      bindLinks();
+      document.getElementById('si-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const em = document.getElementById('si-email').value.trim().toLowerCase();
+        const pw = document.getElementById('si-pw').value, pw2 = document.getElementById('si-pw2').value;
+        if (!validEmail(em)) { toast('Enter a valid email.'); return; }
+        if (pw.length < 8) { toast('Use at least 8 characters.'); return; }
+        if (pw !== pw2) { toast('The passwords don’t match.'); return; }
+        const { data, error } = await supabase.auth.signUp({ email: em, password: pw, options: { emailRedirectTo: location.origin } });
+        if (error) { toast(authError(error)); return; }
+        if (data.session) return; // confirmation turned off: signed in already
+        showSignIn('signin', em, 'Almost done. Tap the confirmation link we emailed you (it can open anywhere), then sign in here with your password.');
+      };
+    } else if (mode === 'forgot') {
+      gate(`<h2 class="sec">Reset password</h2>
+        <form id="si-form" style="display:grid;gap:10px">${emailField(email)}
+          <button class="btn primary" type="submit">Email me a reset link</button></form>
+        ${links([['signin', 'Back to sign in']])}`);
+      bindLinks();
+      document.getElementById('si-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const em = document.getElementById('si-email').value.trim().toLowerCase();
+        if (!validEmail(em)) { toast('Enter a valid email.'); return; }
+        const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: location.origin });
+        if (error) { toast(authError(error)); return; }
+        showSignIn('signin', em, 'If that email has an account, a reset link is on its way. Open it, set a new password, then sign in.');
+      };
+    } else if (mode === 'newpw') {
+      gate(`<h2 class="sec">Set a new password</h2>
+        <form id="si-form" style="display:grid;gap:10px">
+          <label class="field"><span>New password (8+ characters)</span><input type="password" id="si-pw" autocomplete="new-password"></label>
+          <label class="field"><span>Confirm password</span><input type="password" id="si-pw2" autocomplete="new-password"></label>
+          <button class="btn primary" type="submit">Save password</button></form>`);
+      document.getElementById('si-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const pw = document.getElementById('si-pw').value, pw2 = document.getElementById('si-pw2').value;
+        if (pw.length < 8) { toast('Use at least 8 characters.'); return; }
+        if (pw !== pw2) { toast('The passwords don’t match.'); return; }
+        const { data, error } = await supabase.auth.updateUser({ password: pw });
+        if (error) { toast(authError(error)); return; }
+        recovering = false; toast('Password saved.');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) enter(session); else showSignIn('signin', (data.user && data.user.email) || '');
+      };
+    }
+  }
+  let recovering = /type=recovery/.test(location.hash);
 
   async function enter(session) {
     if (started) return;
@@ -74,11 +130,14 @@ if (!URL_ || !KEY) {
   }
 
   supabase.auth.onAuthStateChange((event, session) => {
-    if (session && !started) setTimeout(() => enter(session), 0);
+    if (event === 'PASSWORD_RECOVERY') { recovering = true; setTimeout(() => showSignIn('newpw'), 0); return; }
+    if (event === 'SIGNED_OUT') { started = false; showSignIn('signin'); return; }
+    if (session && !started && !recovering) setTimeout(() => enter(session), 0);
   });
   supabase.auth.getSession().then(({ data: { session } }) => {
+    if (recovering) { showSignIn('newpw'); return; }
     if (session) enter(session);
-    else if (location.hash.includes('error_description')) { showSignIn(); toast('That sign-in link expired. Request a new one.'); }
-    else if (!location.hash.includes('access_token')) showSignIn();
+    else if (/error_description/.test(location.hash)) { showSignIn('signin', '', 'That link expired or was already used. Sign in with your password, or tap “Forgot password?”'); history.replaceState(null, '', location.pathname); }
+    else if (!location.hash.includes('access_token')) showSignIn('signin');
   });
 }

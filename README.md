@@ -10,13 +10,12 @@ Stack: Vite (vanilla JS) · Supabase (auth + Postgres + realtime) · Vercel.
 1. **Supabase**: create a project. In SQL Editor, run `supabase/schema.sql`.
    - Authentication → URL Configuration: set **Site URL** to your Vercel URL
      and add it under **Redirect URLs**.
-   - Optional: Authentication → Email Templates → Magic Link, add
-     `Code: {{ .Token }}` so people can type a code instead of tapping the link
-     (useful when the app is installed on the home screen).
+   - People sign in with email + password. The first time, they tap
+     "Create your password" and confirm their email once.
 2. **Vercel**: import this repo. Add environment variables
    `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Supabase → Project
    Settings → API). Deploy.
-3. Sign in with the admin email from `schema.sql`, then go to
+3. Create your password with the admin email from `schema.sql`, sign in, then go to
    **History → Import** and pick the backup file to load existing data.
 4. Add other people under **Roster → App access**.
 
