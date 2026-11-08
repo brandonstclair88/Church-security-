@@ -37,7 +37,7 @@ if (!URL_ || !KEY) {
       const email = document.getElementById('si-email').value.trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Enter a valid email.'); return; }
       const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin, shouldCreateUser: true } });
-      if (error) { toast(/rate|security purposes/i.test(error.message) ? 'Too many emails. Wait a minute and try again.' : 'Couldn’t send the email. Try again.'); return; }
+      if (error) { toast(/rate|security purposes/i.test(error.message) ? 'Too many emails. Wait a minute and try again.' : 'Couldn’t send the email: ' + (error.message || error.status || 'unknown error')); return; }
       showSignIn(email);
     };
     const codeForm = document.getElementById('si-code');
