@@ -1,7 +1,7 @@
 // Called once a day by a Vercel cron so the free Supabase project never
 // counts as inactive (free projects pause after a week without requests).
 export default async function handler(req, res) {
-  const url = process.env.VITE_SUPABASE_URL;
+  const url = String(process.env.VITE_SUPABASE_URL || '').trim().replace(/\/(rest|auth)\/v1.*$/, '').replace(/\/+$/, '');
   const key = process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
   try {

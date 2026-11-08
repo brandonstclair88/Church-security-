@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createDb } from './db.js';
 import { start, toast, esc } from './app.js';
 
-const URL_ = import.meta.env.VITE_SUPABASE_URL;
-const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const URL_ = String(import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '').replace(/\/(rest|auth)\/v1.*$/, '').replace(/\/+$/, '');
+const KEY = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim().replace(/^["']|["']$/g, '');
 const view = document.getElementById('view');
 
 function gate(html) { view.innerHTML = `<div class="card" style="max-width:420px;margin:24px auto;gap:12px">${html}</div>`; }
