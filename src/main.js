@@ -6,6 +6,7 @@ import { renderPublic } from './public.js';
 const URL_ = String(import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '').replace(/\/(rest|auth)\/v1.*$/, '').replace(/\/+$/, '');
 const KEY = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim().replace(/^["']|["']$/g, '');
 const view = document.getElementById('view');
+const SITE = (import.meta.env.VITE_SITE_URL || (location.hostname.endsWith('.vercel.app') ? 'https://church-security-dun.vercel.app' : location.origin)).replace(/\/+$/, '');
 
 function gate(html) { view.innerHTML = `<div class="card" style="max-width:420px;margin:24px auto;gap:12px">${html}</div>`; }
 
@@ -67,7 +68,7 @@ if (!URL_ || !KEY) {
         if (!validEmail(em)) { toast('Enter a valid email.'); return; }
         if (pw.length < 8) { toast('Use at least 8 characters.'); return; }
         if (pw !== pw2) { toast('The passwords don’t match.'); return; }
-        const { data, error } = await supabase.auth.signUp({ email: em, password: pw, options: { emailRedirectTo: location.origin } });
+        const { data, error } = await supabase.auth.signUp({ email: em, password: pw, options: { emailRedirectTo: SITE } });
         if (error) { toast(authError(error)); return; }
         if (data.session) return; // confirmation turned off: signed in already
         showSignIn('signin', em, 'Almost done. Tap the confirmation link we emailed you (it can open anywhere), then sign in here with your password.');
@@ -82,7 +83,7 @@ if (!URL_ || !KEY) {
         e.preventDefault();
         const em = document.getElementById('si-email').value.trim().toLowerCase();
         if (!validEmail(em)) { toast('Enter a valid email.'); return; }
-        const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: location.origin });
+        const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: SITE });
         if (error) { toast(authError(error)); return; }
         showSignIn('signin', em, 'If that email has an account, a reset link is on its way. Open it, set a new password, then sign in.');
       };

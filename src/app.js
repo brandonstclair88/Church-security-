@@ -313,7 +313,8 @@ function render(){
 }
 
 /* ---------- availability link ---------- */
-function linkUrl(token){ return location.origin+'/?a='+encodeURIComponent(token); }
+const SITE_URL = (import.meta.env.VITE_SITE_URL || (location.hostname.endsWith('.vercel.app') ? 'https://church-security-dun.vercel.app' : location.origin)).replace(/\/+$/,'');
+function linkUrl(token){ return SITE_URL+'/?a='+encodeURIComponent(token); }
 function loadLink(date){
   if(!S.links || S.linkState[date]!==undefined) return;
   S.linkState[date]='loading';
