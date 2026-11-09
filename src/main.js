@@ -54,8 +54,10 @@ if (!URL_ || !KEY) {
       };
     } else if (mode === 'create') {
       gate(`<h2 class="sec">Create your password</h2>
-        <p class="muted small" style="margin:0">Your email must already be on the team’s approved list.</p>
-        <form id="si-form" style="display:grid;gap:10px">${emailField(email)}
+        <p class="muted small" style="margin:0">Use the invite code you were sent, or leave it blank if an admin already added your email.</p>
+        <form id="si-form" style="display:grid;gap:10px">
+          <label class="field"><span>Invite code (if you have one)</span><input type="text" id="si-code" autocomplete="off" autocapitalize="characters" placeholder="ABCD-2345"></label>
+          ${emailField(email)}
           <label class="field"><span>New password (8+ characters)</span><input type="password" id="si-pw" autocomplete="new-password"></label>
           <label class="field"><span>Confirm password</span><input type="password" id="si-pw2" autocomplete="new-password"></label>
           <button class="btn primary" type="submit">Create account</button></form>
@@ -68,6 +70,12 @@ if (!URL_ || !KEY) {
         if (!validEmail(em)) { toast('Enter a valid email.'); return; }
         if (pw.length < 8) { toast('Use at least 8 characters.'); return; }
         if (pw !== pw2) { toast('The passwords don’t match.'); return; }
+        const code = document.getElementById('si-code').value.trim();
+        if (code) {
+          const { data: ok, error: ce } = await supabase.rpc('redeem_invite', { p_code: code, p_email: em });
+          if (ce) { toast('Couldn’t check the code. Try again.'); return; }
+          if (!ok) { toast('That invite code is wrong, already used, or expired. Ask for a new one.'); return; }
+        }
         const { data, error } = await supabase.auth.signUp({ email: em, password: pw, options: { emailRedirectTo: SITE } });
         if (error) { toast(authError(error)); return; }
         if (data.session) return; // confirmation turned off: signed in already
@@ -149,7 +157,18 @@ if (!URL_ || !KEY) {
         if (e) throw e; return token;
       },
     };
-    start({ db, email, role, access, signOut, links });
+    const inviteChars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const invites = {
+      list: async () => { const { data, error: e } = await supabase.from('invite_codes').select('code,role,created_at,expires_at,used_by,used_at').order('created_at', { ascending: false }).limit(20); if (e) throw e; return data; },
+      create: async (r) => {
+        const a = new Uint8Array(8); crypto.getRandomValues(a);
+        const code = Array.from(a, (b) => inviteChars[b % inviteChars.length]).join('');
+        const { error: e } = await supabase.from('invite_codes').insert({ code, role: r, created_by: email });
+        if (e) throw e; return code;
+      },
+      revoke: async (code) => { const { error: e } = await supabase.from('invite_codes').delete().eq('code', code); if (e) throw e; },
+    };
+    start({ db, email, role, access, signOut, links, invites });
   }
 
   if (availToken) {

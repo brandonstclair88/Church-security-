@@ -68,3 +68,5 @@ create trigger only_approved_signups before insert on auth.users
 for each row execute function public.only_approved_signups();
 
 -- 8. Weekly group chat availability link: see 03_availability_links.sql (run it too).
+
+-- 9. One-time invite codes: see 04_invite_codes.sql (run it too).

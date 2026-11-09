@@ -818,13 +818,51 @@ function openImportSheet(){
 }
 
 /* ---------- app access ---------- */
-async function loadAccess(){ if(!S.access) return; try{ S.accessList=await S.access.list(); }catch{ S.accessList=[]; } render(); }
+async function loadAccess(){
+  if(!S.access) return;
+  try{ S.accessList=await S.access.list(); }catch{ S.accessList=[]; }
+  if(S.role==='admin'&&S.invites){ try{ S.inviteList=await S.invites.list(); }catch{ S.inviteList=[]; } }
+  render();
+}
+const fmtCode=c=>c.slice(0,4)+'-'+c.slice(4);
+function inviteMessage(code){
+  const site=(typeof SITE_URL!=='undefined'?SITE_URL:location.origin);
+  return `You're invited to the Sunday Security app.\n1. Open ${site}\n2. Tap "First time? Create your password"\n3. Enter invite code ${fmtCode(code)}, your email, and a password.\nThe code works once and expires in 7 days.`;
+}
+function invitesHtml(){
+  if(S.role!=='admin'||!S.invites) return '';
+  const now=Date.now();
+  const list=(S.inviteList||[]).filter(i=>i.used_at||new Date(i.expires_at).getTime()>now).slice(0,8);
+  const row=i=>{
+    const used=!!i.used_at;
+    return `<li class="row"><span class="code" style="min-width:auto;padding:0 8px">${esc(fmtCode(i.code))}</span><span class="main"><span class="sub" style="overflow-wrap:anywhere">${used?'Used by '+esc(i.used_by||''):'Unused · '+esc(i.role==='admin'?'Admin':'Editor')+' · expires '+esc(new Date(i.expires_at).toLocaleDateString(undefined,{month:'short',day:'numeric'}))}</span></span>${used?'':`<button class="req-btn" data-act="invshow" data-v="${esc(i.code)}">Share</button><button class="req-btn" style="color:var(--warn)" data-act="invdel" data-v="${esc(i.code)}" data-confirm="Tap again">Cancel</button>`}</li>`;
+  };
+  return `<div class="sec-head"><h2 class="sec">Invite codes</h2><button class="btn" data-act="invadd">New code</button></div>
+    ${list.length?`<ul class="list">${list.map(row).join('')}</ul>`:''}
+    <p class="hint">Text someone a one-time code instead of adding their email. The first person to use it gets access. Unused codes expire after 7 days.</p>`;
+}
+function openInviteSheet(code){
+  const msg=inviteMessage(code);
+  openSheet('Invite code', `<div style="font-family:var(--f-mono);font-size:32px;font-weight:600;letter-spacing:.08em;text-align:center">${esc(fmtCode(code))}</div>
+    <pre class="text" id="inv-msg">${esc(msg)}</pre>
+    <button class="btn primary block" id="inv-copy">Copy message</button>
+    <p class="hint">Works once. After someone uses it, it can’t be used again.</p>`,
+  body=>{ body.querySelector('#inv-copy').onclick=()=>copyText(msg,'inv-msg'); });
+}
+function openNewInviteSheet(){
+  openSheet('New invite code', `<label class="field"><span>Role for whoever uses it</span><select id="inv-role"><option value="editor">Editor — can change schedules and everything else</option><option value="admin">Admin — can also manage access</option></select></label>
+    <div class="actions"><button class="btn" data-act="close">Cancel</button><button class="btn primary" id="inv-go">Create code</button></div>`,
+  body=>{ body.querySelector('#inv-go').onclick=async()=>{
+    try{ const code=await S.invites.create(body.querySelector('#inv-role').value); openInviteSheet(code); loadAccess(); }catch{ toast('Couldn’t create a code. Try again.'); }
+  }; });
+}
 function accessHtml(){
   const isAdmin=S.role==='admin';
   const list=S.accessList;
   const rows=!list?'<p class="hint">Loading…</p>':`<ul class="list">${list.map(a=>`<li class="row"><span class="main"><span class="name" style="overflow-wrap:anywhere">${esc(a.email)}</span><span class="tags"><span class="tag">${esc(a.role==='admin'?'Admin':'Editor')}</span></span></span>${isAdmin&&a.email!==S.me?`<button class="req-btn" style="color:var(--warn)" data-act="accdel" data-v="${esc(a.email)}" data-confirm="Tap again">Remove</button>`:''}</li>`).join('')}</ul>`;
   return `<div class="sec-head"><h2 class="sec">App access</h2>${isAdmin?'<button class="btn" data-act="accadd">Add email</button>':''}</div>
     ${rows}
+    ${invitesHtml()}
     <p class="hint">Only these emails can sign in and see the roster, including who is armed. Editors can change schedules; admins can also manage access.</p>
     <div class="sec-head"><span class="small muted" style="overflow-wrap:anywhere">Signed in as ${esc(S.me||'')}</span><button class="btn" data-act="signout">Sign out</button></div>`;
 }
@@ -871,6 +909,9 @@ const ACTS={
   cplink:()=>{ const t=S.linkState[S.date]; if(t) copyText(linkUrl(t),'link-msg'); },
   import:()=>openImportSheet(),
   accadd:()=>openAccessSheet(),
+  invadd:()=>openNewInviteSheet(),
+  invshow:el=>openInviteSheet(el.dataset.v),
+  invdel:el=>armConfirm(el,async()=>{ try{ await S.invites.revoke(el.dataset.v); toast('Code canceled.'); loadAccess(); }catch{ toast('Couldn’t cancel that code.'); } }),
   accdel:el=>armConfirm(el,async()=>{ try{ await S.access.remove(el.dataset.v); toast('Removed.'); loadAccess(); }catch{ toast('Couldn’t remove that email.'); } }),
   signout:()=>{ if(S.signOut) S.signOut(); },
   secadd:el=>{ const L=editableLayout(), k=el.dataset.v, id='s'+Date.now().toString(36);
@@ -898,7 +939,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 /* ---------- boot ---------- */
 function onErr(e){ toast('Lost connection to saved data. Reload to reconnect.'); }
 export function start(ctx){
-  S.db=ctx.db; S.links=ctx.links||null; S.me=ctx.email; S.role=ctx.role; S.access=ctx.access; S.signOut=ctx.signOut; S.canWrite=true;
+  S.db=ctx.db; S.links=ctx.links||null; S.invites=ctx.invites||null; S.me=ctx.email; S.role=ctx.role; S.access=ctx.access; S.signOut=ctx.signOut; S.canWrite=true;
   document.getElementById('tabs').hidden=false;
   render();
   const db=S.db;
