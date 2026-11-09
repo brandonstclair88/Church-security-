@@ -14,7 +14,7 @@ const S = {
   db:null, me:null, role:null, access:null, links:null, linkState:{}, signOut:null, canWrite:true, noDb:false, accessList:null,
   loaded:{members:false,posts:false,weeks:false}, medics:[],
   members:[], posts:[], settings:null, weeks:{}, profiles:{},
-  tab:'sunday', date:defaultSunday(), mode:'avail', svc:'AM', editMap:false, layout:null, selSec:null, selPt:null, mirror:true, withDuties:false, dragging:false, pendingRender:false
+  tab:'sunday', date:defaultSunday(), mode:'avail', svc:'AM', editMap:false, layout:null, selSec:null, selPt:null, mirror:true, withDuties:false, showMap:false, dragging:false, pendingRender:false
 };
 
 function rules(){ const r=(S.settings&&S.settings.rules)||{}; return {AM:{...DEFAULT_RULES.AM,...(r.AM||{})}, PM:{...DEFAULT_RULES.PM,...(r.PM||{})}}; }
@@ -327,15 +327,17 @@ function linkCardHtml(w, active){
   loadLink(S.date);
   const st=S.linkState[S.date];
   const replied=active.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id].answeredAt).length;
-  if(st===undefined||st==='loading') return `<div class="card"><strong>Group chat link</strong><p class="hint">Checking for this week’s link…</p></div>`;
-  if(!st) return `<div class="card"><div class="sec-head"><strong>Group chat link</strong></div>
-    <p class="hint">Make a link for this Sunday and post it in the group chat. Each person taps their name and picks AM, PM, both, or out. The link stops working the day after this Sunday.</p>
-    <button class="btn primary" data-act="mklink">Create link for ${esc(fmtDate(S.date))}</button></div>`;
-  return `<div class="card"><div class="sec-head"><strong>Group chat link</strong><span class="small muted">${replied} of ${active.length} replied</span></div>
-    <div class="actions"><button class="btn primary" data-act="cpmsg">Copy group chat message</button><button class="btn" data-act="cplink">Copy link only</button></div>
-    <pre class="text" id="link-msg">${esc(weeklyMessage(S.date, st))}</pre></div>`;
+  if(st===undefined||st==='loading') return `<div class="linkbar"><span class="muted small">Checking for this week’s link…</span></div>`;
+  if(!st) return `<div class="linkbar"><div><strong>Group chat link</strong><div class="small muted">People tap their name and pick AM / PM.</div></div><button class="btn primary" data-act="mklink">Create link</button></div>`;
+  return `<div class="linkbar"><div><strong>Group chat link</strong><div class="small muted">${replied} replied by link</div></div><button class="btn primary" data-act="cpmsg">Copy message</button></div>
+    <pre class="text" id="link-msg" hidden>${esc(weeklyMessage(S.date, st))}</pre>`;
 }
 
+function answerOf(a){
+  if(!a) return null;
+  if(!(a.answeredAt||a.manualAt||a.AM||a.PM)) return null;
+  return a.AM&&a.PM?'both':a.AM?'AM':a.PM?'PM':'out';
+}
 function viewSunday(v){
   const w=week();
   const active=S.members.filter(m=>m.active!==false);
@@ -343,52 +345,72 @@ function viewSunday(v){
     <button class="icon-btn" data-act="date" data-v="-7" aria-label="Previous Sunday">‹</button>
     <div class="d"><strong>${esc(fmtDate(S.date))}</strong>${S.date===defaultSunday()?'<span class="small muted">This Sunday</span>':`<button class="req-btn" data-act="today">Go to this Sunday</button>`}</div>
     <button class="icon-btn" data-act="date" data-v="7" aria-label="Next Sunday">›</button></div>`;
-  const seg=`<div class="seg" role="group" aria-label="View"><button data-act="mode" data-v="avail" aria-pressed="${S.mode==='avail'}">Availability</button><button data-act="mode" data-v="sched" aria-pressed="${S.mode==='sched'}">Schedule</button></div>`;
   if(!active.length){ v.innerHTML=datebar+emptyBox('No team members yet','Add your team in Roster, then mark who’s available here.','Go to Roster','tab','roster'); return; }
   if(!S.posts.length){ v.innerHTML=datebar+emptyBox('No posts set up yet','Add your posts and duties in Posts first.','Go to Posts','tab','posts'); return; }
 
-  const stats=SVCS.map(s=>{ const a=active.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id][s]); return `<div class="stat"><div class="k">${SVC_NAME[s]}</div><div class="v">${a.length} avail · ${a.filter(m=>m.armed).length} armed</div><div class="small muted">${postsFor(s).length} posts</div></div>`; }).join('');
+  const answered=active.filter(m=>answerOf(w.avail&&w.avail[m.id])).length;
+  const generated=SVCS.some(sv=>Object.values((w.sched&&w.sched[sv])||{}).some(Boolean));
+  const issues=generated?SVCS.reduce((n,sv)=>n+checkService(sv,w).length,0):0;
+  const cnt=sv=>{ const a=active.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id][sv]); return `${a.length} avail · ${a.filter(m=>m.armed).length} armed`; };
+  const statusPill = !generated ? '<span class="pill">Not generated</span>' : issues ? `<span class="pill warn">${issues} to fix</span>` : '<span class="pill ok">Schedule ready</span>';
+  const status=`<div class="status"><div class="status-top"><span><strong>${answered}</strong> of ${active.length} answered</span>${statusPill}</div>
+    <div class="status-sub">AM ${cnt('AM')}<span class="sep">|</span>PM ${cnt('PM')}</div></div>`;
+  const steps=`<div class="steps" role="group" aria-label="Step">
+    <button data-act="mode" data-v="avail" aria-pressed="${S.mode==='avail'}"><span class="num">1</span>Availability</button>
+    <button data-act="mode" data-v="sched" aria-pressed="${S.mode==='sched'}"><span class="num">2</span>Schedule &amp; share</button></div>`;
 
   let body='';
   if(S.mode==='avail'){
     const byId={}; S.posts.forEach(p=>byId[p.id]=p);
-    const rows=active.map(m=>{
+    const row=m=>{
       const a=(w.avail&&w.avail[m.id])||{};
-      const reqs=SVCS.filter(s=>a['req'+s]&&byId[a['req'+s]]).map(s=>s+' '+byId[a['req'+s]].code);
-      return `<li class="row"><div class="main"><span class="name">${esc(m.name)}</span><span class="tags">${personTags(m)}${a.answeredAt?'<span class="tag med">Replied</span>':''}</span>${reqs.length?`<div class="sub">Asked for ${esc(reqs.join(', '))}</div>`:''}</div>
-        <button class="req-btn" data-act="req" data-m="${m.id}">Request</button>
-        ${SVCS.map(s=>`<button class="tog" data-act="av" data-m="${m.id}" data-s="${s}" aria-pressed="${!!a[s]}" aria-label="${esc(m.name)} ${SVC_NAME[s]}">${s}</button>`).join('')}</li>`;
-    }).join('');
-    body=`${linkCardHtml(w,active)}<div class="sec-head"><span class="small muted">Answers from the link fill in here. You can still tap AM / PM by hand.</span>
-      <div class="actions"><button class="btn" data-act="allav" data-v="AM">All AM</button><button class="btn" data-act="allav" data-v="PM">All PM</button></div></div>
-      <ul class="list">${rows}</ul>
+      const ans=answerOf(a);
+      const reqs=SVCS.filter(sv=>a['req'+sv]&&byId[a['req'+sv]]).map(sv=>sv+' '+byId[a['req'+sv]].code);
+      const opt=(k,t)=>`<button data-act="av4" data-m="${m.id}" data-v="${k}" aria-pressed="${ans===k}" aria-label="${esc(m.name)}: ${t}">${t}</button>`;
+      return `<li class="arow"><button class="aname" data-act="req" data-m="${m.id}"><span class="name">${esc(m.name)}</span>${m.armed?'<span class="dot" title="Armed" aria-label="Armed"></span>':''}
+          <span class="asub">${reqs.length?'Asked for '+esc(reqs.join(', ')):a.answeredAt?'Replied by link':a.manualAt||ans?'Set by hand':'No reply yet'}</span></button>
+        <div class="seg4" role="group" aria-label="${esc(m.name)} availability">${opt('out','Out')}${opt('AM','AM')}${opt('PM','PM')}${opt('both','Both')}</div></li>`;
+    };
+    const waiting=active.filter(m=>!answerOf(w.avail&&w.avail[m.id])), done=active.filter(m=>answerOf(w.avail&&w.avail[m.id]));
+    body=`${linkCardHtml(w,active)}
+      ${waiting.length?`<div class="grp-head"><span>Waiting on ${waiting.length}</span></div><ul class="list">${waiting.map(row).join('')}</ul>`:''}
+      ${done.length?`<div class="grp-head"><span>Answered ${done.length}</span></div><ul class="list">${done.map(row).join('')}</ul>`:''}
+      <p class="hint">Tap a name to request a specific post. <span class="dot inline"></span> = armed.</p>
       ${medHtml(w)}
-      <button class="btn primary block" data-act="gen">Generate schedule</button>`;
+      <button class="btn primary block big" data-act="gen">${generated?'Regenerate schedule':'Generate schedule'}</button>`;
   } else {
     const svc=S.svc, posts=postsFor(svc), mm=memberMap(), sched=(w.sched&&w.sched[svc])||{}, locks=(w.locks&&w.locks[svc])||{};
     const warns=checkService(svc,w);
     const any=Object.values(sched).some(Boolean);
-    const svcSeg=`<div class="seg" role="group" aria-label="Service">${SVCS.map(s=>`<button data-act="svc" data-v="${s}" aria-pressed="${svc===s}">${SVC_NAME[s]} (${s})</button>`).join('')}</div>`;
-    const warnHtml = !any ? '' : warns.length ? `<ul class="warns">${warns.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : `<div class="okline">All posts filled. Armed coverage met.</div>`;
-    const rows=posts.map(p=>{ const m=mm[sched[p.id]];
-      return `<li><button class="row tap" data-act="assign" data-p="${p.id}"><span class="code">${esc(label(p))}</span><span class="main"><span class="name">${m?esc(m.name):'<span style="color:var(--warn)">Unfilled</span>'}</span><span class="tags">${personTags(m)}${locks[p.id]&&m?'<span class="tag lock">Locked</span>':''}</span><div class="sub">${esc(p.name||'')}</div></span><span class="muted" aria-hidden="true">›</span></button></li>`; }).join('');
-    const used=new Set(Object.values(sched));
-    const off=active.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id][svc]&&!used.has(m.id));
-    const text=weekText(w,S.withDuties);
-    body=`${svcSeg}
-      <div class="actions"><button class="btn primary" data-act="gen">${any?'Regenerate both':'Generate both services'}</button></div>
-      <p class="hint">Locked posts and requests are kept when you regenerate. Tap a post to change who’s there.</p>
-      ${warnHtml}
-      ${mapHtml(svc,sched)}
-      ${posts.length?`<ul class="list">${rows}${medicName(w,svc)?`<li class="row"><span class="code">Med</span><span class="main"><span class="name">${esc(medicName(w,svc))}</span><div class="sub">Medical team · set in Availability</div></span></li>`:''}${off.length?`<li class="row"><span class="code">OFF</span><span class="main sub">${esc(off.map(m=>m.name).join(', '))}</span></li>`:''}</ul>`:emptyBox('No posts for this service','Turn on '+SVC_NAME[svc]+' for posts in the Posts tab.')}
-      ${any?`<div class="card"><div class="sec-head"><h2 class="sec">Group chat</h2></div>
-        <label class="check"><input type="checkbox" id="wd-tog" ${S.withDuties?'checked':''}> Include duties in copied text</label>
-        <div class="actions"><button class="btn primary" data-act="mapimg">Share schedule image</button><button class="btn" data-act="dutiesimg">Share duties image</button></div>
-        <div class="actions"><button class="btn" data-act="copy">Copy text</button></div>
-        <pre class="text" id="out-text">${esc(text)}</pre>
-        <p class="hint">The schedule image has both maps and every assignment. The duties image lists what each post does and only changes when duties are edited. Armed status is never included.</p></div>`:''}`;
+    const svcSeg=`<div class="seg" role="group" aria-label="Service">${SVCS.map(sv=>`<button data-act="svc" data-v="${sv}" aria-pressed="${svc===sv}">${SVC_NAME[sv]}</button>`).join('')}</div>`;
+    if(!generated){
+      body=`${svcSeg}${emptyBox('No schedule yet','Mark who’s available, then generate. Locked posts and requests are kept.','Generate schedule','gen','')}`;
+    } else {
+      const warnHtml = warns.length ? `<ul class="warns">${warns.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : `<div class="okline">All posts filled. Armed coverage met.</div>`;
+      const prow=p=>{ const m=mm[sched[p.id]];
+        return `<li><button class="prow" data-act="assign" data-p="${p.id}"><span class="code">${esc(p.code)}</span><span class="pname${m?'':' open'}">${m?esc(m.name):'Open'}</span>${m&&m.armed?'<span class="dot" aria-label="Armed"></span>':''}${locks[p.id]&&m?'<span class="lock" aria-label="Locked">Locked</span>':''}<span class="pwhere">${esc(p.name||'')}</span></button></li>`; };
+      const used=new Set(Object.values(sched));
+      const off=active.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id][svc]&&!used.has(m.id));
+      const md=medicName(w,svc);
+      body=`${svcSeg}
+        ${warnHtml}
+        <ul class="list">${posts.map(prow).join('')}
+          ${md?`<li><div class="prow static"><span class="code">Med</span><span class="pname">${esc(md)}</span><span class="pwhere">Medical</span></div></li>`:''}
+          ${off.length?`<li><div class="prow static"><span class="code">OFF</span><span class="pname muted" style="font-weight:400">${esc(off.map(m=>m.name).join(', '))}</span></div></li>`:''}</ul>
+        <p class="hint">Tap a post to swap or lock someone. <span class="dot inline"></span> = armed.</p>
+        <button class="btn block" data-act="showmap">${S.showMap?'Hide map':'Show map'}</button>
+        ${S.showMap?mapHtml(svc,sched):''}
+        <details class="more"><summary>More options</summary>
+          <div class="more-in">
+            <button class="btn block" data-act="gen">Regenerate both services</button>
+            <label class="check"><input type="checkbox" id="wd-tog" ${S.withDuties?'checked':''}> Include duties in copied text</label>
+            <button class="btn block" data-act="copy">Copy schedule as text</button>
+            <pre class="text" id="out-text">${esc(weekText(w,S.withDuties))}</pre>
+          </div></details>
+        <div class="sharebar"><div class="sharebar-in"><button class="btn primary" data-act="mapimg">Share schedule</button><button class="btn" data-act="dutiesimg">Share duties</button></div></div>`;
+    }
   }
-  v.innerHTML=datebar+`<div class="stats">${stats}</div>`+seg+body;
+  v.innerHTML=datebar+status+steps+body;
 }
 
 const VB={w:380,h:334}, AX=190;
@@ -818,6 +840,10 @@ const ACTS={
   openweek:el=>{ flushWeek(); S.date=el.dataset.v; S.tab='sunday'; S.mode='sched'; render(); scrollTo(0,0); },
   mode:el=>{ S.mode=el.dataset.v; S.editMap=false; render(); },
   svc:el=>{ S.svc=el.dataset.v; render(); },
+  av4:el=>{ if(!guard()) return; const w=editableWeek(), m=el.dataset.m, k=el.dataset.v; const a=w.avail[m]=w.avail[m]||{};
+    a.AM=(k==='AM'||k==='both'); a.PM=(k==='PM'||k==='both'); a.manualAt=Date.now();
+    SVCS.forEach(sv=>{ if(!a[sv]) delete a['req'+sv]; }); touchWeek(); render(); },
+  showmap:()=>{ S.showMap=!S.showMap; S.editMap=false; render(); },
   av:el=>{ if(!guard()) return; const w=editableWeek(), m=el.dataset.m, s=el.dataset.s; w.avail[m]=w.avail[m]||{}; w.avail[m][s]=!w.avail[m][s]; if(!w.avail[m][s]) delete w.avail[m]['req'+s]; touchWeek(); render(); },
   allav:el=>{ if(!guard()) return; const w=editableWeek(), s=el.dataset.v; S.members.filter(m=>m.active!==false).forEach(m=>{ w.avail[m.id]=w.avail[m.id]||{}; w.avail[m.id][s]=true; }); touchWeek(); render(); },
   req:el=>openRequestSheet(el.dataset.m),
