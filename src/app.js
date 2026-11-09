@@ -380,7 +380,7 @@ function viewSunday(v){
     body=`${SHOW_AVAIL_LINK?linkCardHtml(w,active):''}
       ${waiting.length?`<div class="grp-head"><span>Waiting on ${waiting.length}</span></div><ul class="list">${waiting.map(row).join('')}</ul>`:''}
       ${done.length?`<div class="grp-head"><span>Answered ${done.length}</span></div><ul class="list">${done.map(row).join('')}</ul>`:''}
-      <p class="hint">Tap a name to request a specific post. <span class="dot inline"></span> = armed.</p>
+      <p class="hint">Tap a name to request a specific post. Tap a highlighted choice again to clear it. <span class="dot inline"></span> = armed.</p>
       ${medHtml(w)}
       <button class="btn primary block big" data-act="gen">${generated?'Regenerate schedule':'Generate schedule'}</button>`;
   } else {
@@ -886,6 +886,7 @@ const ACTS={
   mode:el=>{ S.mode=el.dataset.v; S.editMap=false; render(); },
   svc:el=>{ S.svc=el.dataset.v; render(); },
   av4:el=>{ if(!guard()) return; const w=editableWeek(), m=el.dataset.m, k=el.dataset.v; const a=w.avail[m]=w.avail[m]||{};
+    if(answerOf(a)===k){ delete w.avail[m]; touchWeek(); render(); toast('Cleared. Moved back to “Waiting on.”'); return; }
     a.AM=(k==='AM'||k==='both'); a.PM=(k==='PM'||k==='both'); a.manualAt=Date.now();
     SVCS.forEach(sv=>{ if(!a[sv]) delete a['req'+sv]; }); touchWeek(); render(); },
   showmap:()=>{ S.showMap=!S.showMap; S.editMap=false; render(); },
