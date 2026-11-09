@@ -936,16 +936,100 @@ document.addEventListener('click',e=>{ const el=e.target.closest('[data-act]'); 
 addEventListener('pagehide',()=>{ flushWeek(); flushLayout(); });
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'){ flushWeek(); flushLayout(); } });
 
+/* ---------- in-app tutorial ---------- */
+const TOUR_KEY='ss-tour-done-v1';
+const q1=sel=>document.querySelector(sel);
+const TOUR=[
+  {tab:'sunday', mode:'avail', target:null, title:'Welcome', text:'This quick tour shows how to build the Sunday security schedule. It takes about a minute. Tap Next to start.'},
+  {tab:'sunday', mode:'avail', target:()=>q1('.datebar'), title:'Pick the Sunday', text:'Use the arrows to choose which Sunday you’re scheduling.'},
+  {tab:'sunday', mode:'avail', target:()=>q1('.status'), title:'Quick status', text:'How many people have answered, how many are available and armed for each service, and whether the schedule is ready.'},
+  {tab:'sunday', mode:'avail', target:()=>q1('.steps'), title:'Two steps', text:'Step 1 is availability. Step 2 is the schedule and sharing it.'},
+  {tab:'sunday', mode:'avail', target:()=>q1('.arow .seg4'), title:'Mark availability', text:'After asking in the group chat, tap Out, AM, PM, or Both for each person. Anyone not marked stays at the top under “Waiting on.”'},
+  {tab:'sunday', mode:'avail', target:()=>q1('.arow .aname'), title:'Requests', text:'Tap a name if that person asked for a specific post. A brown dot means they’re armed. Key, door app, gate app, and medical training show under the name.'},
+  {tab:'sunday', mode:'avail', target:()=>{ const s=q1('select[id^="med-sel-"]'); return s?s.closest('.card'):null; }, title:'Medical', text:'Choose who’s on medical for the morning and evening. The medical team is managed on the Roster tab.'},
+  {tab:'sunday', mode:'avail', target:()=>q1('button.big[data-act="gen"]'), title:'Generate', text:'When everyone’s marked, tap Generate. Armed posts are filled first, then everyone else rotates so people don’t get the same post every week.'},
+  {tab:'sunday', mode:'sched', target:()=>q1('.list .prow')||q1('.steps button[data-v="sched"]'), title:'Check the schedule', text:'Step 2 shows each post and who’s on it. Switch Morning and Evening at the top. Tap any post to swap the person or lock them in place.'},
+  {tab:'sunday', mode:'sched', target:()=>q1('.warns')||q1('.okline'), title:'Warnings', text:'Green means every post is filled and armed coverage is met. Anything that needs fixing shows here in red.'},
+  {tab:'sunday', mode:'sched', target:()=>q1('.sharebar-in'), title:'Share it', text:'Share schedule makes one picture with both services for the group chat. Share duties sends what each post does.'},
+  {tab:'roster', target:()=>q1('[data-act="tab"][data-v="roster"]'), title:'Roster', text:'Add people and tap a person to mark armed, church key, door app, gate app, or medical training. The medical team has its own list here too.'},
+  {tab:'roster', admin:true, target:()=>{ const h=[...document.querySelectorAll('h2.sec')].find(x=>/App access/.test(x.textContent)); return h?h.closest('.sec-head'):null; }, title:'Who can sign in', text:'Admins add people here, by email or with a one-time invite code you text them.'},
+  {tab:'posts', target:()=>q1('[data-act="tab"][data-v="posts"]'), title:'Posts and duties', text:'Edit what each post does and choose which posts must be armed. Changes show up in the duties picture right away.'},
+  {tab:'history', target:()=>q1('[data-act="tab"][data-v="history"]'), title:'History', text:'Past schedules live here, and they drive the rotation. Use Export backup now and then to keep a copy.'},
+  {tab:'sunday', mode:'avail', target:()=>q1('#help-btn'), title:'That’s it', text:'Mark availability, generate, check it, and share. Tap ? any time to see this tour again.'},
+];
+let tour=null;
+function tourSteps(){ return TOUR.filter(st=>!st.admin||S.role==='admin'); }
+function startTour(){
+  if(tour) return;
+  closeSheet(); flushWeek();
+  tour={i:0, saved:{tab:S.tab, mode:S.mode, svc:S.svc, editMap:S.editMap}};
+  const layer=document.createElement('div'); layer.className='tour-layer'; layer.id='tour-layer';
+  layer.innerHTML=`<div class="tour-dim" id="td-t"></div><div class="tour-dim" id="td-b"></div><div class="tour-dim" id="td-l"></div><div class="tour-dim" id="td-r"></div><div class="tour-spot" id="tour-spot"></div><div class="tour-card" id="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title"></div>`;
+  document.body.appendChild(layer);
+  layer.addEventListener('click',e=>{ const b=e.target.closest('[data-tour]'); if(!b) return; const a=b.dataset.tour;
+    if(a==='next') tourGo(tour.i+1); else if(a==='back') tourGo(tour.i-1); else endTour(); });
+  addEventListener('resize',tourPlace); addEventListener('scroll',tourPlace,{passive:true});
+  document.addEventListener('keydown',tourKeys);
+  tourGo(0);
+}
+function tourKeys(e){ if(!tour) return; if(e.key==='Escape') endTour(); else if(e.key==='ArrowRight') tourGo(tour.i+1); else if(e.key==='ArrowLeft') tourGo(tour.i-1); }
+function tourGo(i){
+  const steps=tourSteps();
+  if(i>=steps.length){ endTour(); return; }
+  if(i<0) i=0;
+  tour.i=i; const st=steps[i];
+  S.tab=st.tab; if(st.mode) S.mode=st.mode; S.editMap=false;
+  render();
+  const el=st.target?st.target():null;
+  tour.el=el;
+  if(el) el.scrollIntoView({block:'center'});
+  const card=document.getElementById('tour-card');
+  card.innerHTML=`<div class="tour-count">${i+1} of ${steps.length}</div><h3 id="tour-title">${esc(st.title)}</h3><p>${esc(st.text)}</p>
+    <div class="tour-actions"><button class="req-btn" data-tour="skip">${i===steps.length-1?'':'Skip tour'}</button><span style="flex:1"></span>${i>0?'<button class="btn" data-tour="back">Back</button>':''}<button class="btn primary" data-tour="next">${i===steps.length-1?'Done':'Next'}</button></div>`;
+  requestAnimationFrame(tourPlace);
+  const nb=card.querySelector('[data-tour="next"]'); if(nb) nb.focus({preventScroll:true});
+}
+function tourPlace(){
+  if(!tour) return;
+  const spot=document.getElementById('tour-spot'), card=document.getElementById('tour-card'); if(!spot||!card) return;
+  const el=tour.el&&tour.el.isConnected?tour.el:null;
+  const vh=innerHeight, vw=innerWidth;
+  const dim=(id,l,t,w,h)=>{ const d=document.getElementById(id); if(d) d.style.cssText=`left:${l}px;top:${t}px;width:${Math.max(0,w)}px;height:${Math.max(0,h)}px`; };
+  if(!el){ dim('td-t',0,0,vw,vh); dim('td-b',0,0,0,0); dim('td-l',0,0,0,0); dim('td-r',0,0,0,0); spot.style.cssText='display:none'; card.style.top=Math.max(80,(vh-card.offsetHeight)/2)+'px'; card.style.bottom='auto'; return; }
+  const r=el.getBoundingClientRect(), pad=6;
+  spot.style.cssText=`left:${r.left-pad}px;top:${r.top-pad}px;width:${r.width+pad*2}px;height:${r.height+pad*2}px`;
+  const L=r.left-pad, T=r.top-pad, R=r.right+pad, B=r.bottom+pad;
+  dim('td-t',0,0,vw,T); dim('td-b',0,B,vw,vh-B); dim('td-l',0,T,L,B-T); dim('td-r',R,T,vw-R,B-T);
+  const ch=card.offsetHeight, below=vh-r.bottom, above=r.top;
+  if(below>=ch+24||below>=above){ card.style.top=Math.min(vh-ch-12, r.bottom+pad+12)+'px'; }
+  else { card.style.top=Math.max(12, r.top-pad-12-ch)+'px'; }
+  card.style.bottom='auto';
+}
+function endTour(){
+  if(!tour) return;
+  const sv=tour.saved; tour=null;
+  document.getElementById('tour-layer')?.remove();
+  removeEventListener('resize',tourPlace); removeEventListener('scroll',tourPlace);
+  document.removeEventListener('keydown',tourKeys);
+  try{ localStorage.setItem(TOUR_KEY,'1'); }catch{}
+  S.tab=sv.tab; S.mode=sv.mode; S.svc=sv.svc; S.editMap=false; render(); scrollTo(0,0);
+}
+function maybeAutoTour(){
+  let done=false; try{ done=localStorage.getItem(TOUR_KEY)==='1'; }catch{}
+  if(!done && S.members.length && S.posts.length) setTimeout(startTour,400);
+}
+
 /* ---------- boot ---------- */
 function onErr(e){ toast('Lost connection to saved data. Reload to reconnect.'); }
 export function start(ctx){
   S.db=ctx.db; S.links=ctx.links||null; S.invites=ctx.invites||null; S.me=ctx.email; S.role=ctx.role; S.access=ctx.access; S.signOut=ctx.signOut; S.canWrite=true;
   document.getElementById('tabs').hidden=false;
+  const hb=document.getElementById('help-btn'); if(hb){ hb.hidden=false; hb.onclick=()=>startTour(); }
   render();
   const db=S.db;
-  db.collection('members').onSnapshot(snap=>{ S.members=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'')); S.loaded.members=true; render(); }, onErr);
+  db.collection('members').onSnapshot(snap=>{ S.members=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'')); S.loaded.members=true; render(); if(!S.tourChecked&&S.loaded.posts){ S.tourChecked=true; maybeAutoTour(); } }, onErr);
   db.collection('medics').onSnapshot(snap=>{ S.medics=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'')); render(); }, onErr);
-  db.collection('posts').onSnapshot(snap=>{ S.posts=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order??99)-(b.order??99)); S.loaded.posts=true; render(); }, onErr);
+  db.collection('posts').onSnapshot(snap=>{ S.posts=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order??99)-(b.order??99)); S.loaded.posts=true; render(); if(!S.tourChecked&&S.loaded.members){ S.tourChecked=true; maybeAutoTour(); } }, onErr);
   db.doc('settings/team').onSnapshot(snap=>{ S.settings=snap.exists?snap.data():{}; render(); }, onErr);
   db.doc('settings/map').onSnapshot(snap=>{ if(layoutDirty()||S.dragging) return; const dd=snap.exists?snap.data():null; S.layout=(dd&&dd.v===2&&Array.isArray(dd.shapes))?dd:null; render(); }, onErr);
   db.collection('weeks').onSnapshot(snap=>{ const next={}; snap.docs.forEach(d=>{ next[d.id]={...d.data(), date:d.id}; }); if(isDirty(S.date)&&S.weeks[S.date]) next[S.date]=S.weeks[S.date]; S.weeks=next; S.loaded.weeks=true; render(); }, onErr);

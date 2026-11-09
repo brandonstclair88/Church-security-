@@ -208,3 +208,17 @@ details.more summary{padding:12px;cursor:pointer;font-weight:600;color:var(--mut
 main:has(.sharebar){padding-bottom:110px}
 .toast{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 @media (max-width:360px){.seg4 button{min-width:36px;padding:0 4px;font-size:12px}}
+
+/* in-app tutorial */
+.brand-right{display:inline-flex;align-items:center;gap:10px}
+.help-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent);font-weight:700;font-size:15px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.tour-layer{position:fixed;inset:0;z-index:60}
+.tour-spot{position:fixed;border-radius:12px;outline:2px solid var(--accent);outline-offset:2px;pointer-events:none}
+@media (prefers-reduced-motion:no-preference){.tour-spot{transition:left .2s,top .2s,width .2s,height .2s}}
+.tour-card{position:fixed;left:50%;transform:translateX(-50%);width:min(380px,calc(100% - 32px));background:var(--surface);color:var(--fg);border-radius:14px;padding:14px 16px 12px;box-shadow:0 10px 30px rgba(0,0,0,.3);display:grid;gap:6px}
+.tour-card h3{margin:0;font-family:var(--f-display);font-size:22px;letter-spacing:.02em;text-transform:uppercase}
+.tour-card p{margin:0;font-size:15px;line-height:1.45}
+.tour-count{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tour-actions{display:flex;align-items:center;gap:8px;margin-top:6px}
+.tour-actions .btn{min-height:40px}
+.tour-dim{position:fixed;background:rgba(8,12,10,.6)}
