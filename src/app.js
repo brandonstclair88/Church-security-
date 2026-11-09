@@ -23,7 +23,12 @@ function postsFor(svc){ return S.posts.filter(p=>(p.services||[]).includes(svc))
 function label(p){ return p.seat ? '('+p.code+')' : p.code; }
 function blankWeek(){ return {date:S.date, avail:{}, sched:{AM:{},PM:{}}, locks:{AM:{},PM:{}}}; }
 function week(){ return S.weeks[S.date] || blankWeek(); }
+const QUALS=[['churchKey','Church key','Key'],['doorApp','Door app','Door'],['gateApp','Gate app','Gate'],['medTrained','Medical training','Med']];
+// Set to true to bring back the group chat availability link on the Sunday page.
+const SHOW_AVAIL_LINK=false;
 function personTags(m){ if(!m) return ''; return m.armed?'<span class="tag armed">Armed</span>':''; }
+function qualTags(m){ if(!m) return ''; return QUALS.filter(([k])=>m[k]).map(([,,short])=>`<span class="tag">${short}</span>`).join(''); }
+function qualText(m){ return QUALS.filter(([k])=>m&&m[k]).map(([,,short])=>short.toLowerCase()).join(' · '); }
 function needsArmed(p,svc){ return Array.isArray(p.armedIn) ? p.armedIn.includes(svc) : !!p.requiresArmed; }
 function medicName(w,svc){ const id=w&&w.med&&w.med[svc]; const m=id&&S.medics.find(x=>x.id===id); return m?m.name:''; }
 
@@ -368,11 +373,11 @@ function viewSunday(v){
       const reqs=SVCS.filter(sv=>a['req'+sv]&&byId[a['req'+sv]]).map(sv=>sv+' '+byId[a['req'+sv]].code);
       const opt=(k,t)=>`<button data-act="av4" data-m="${m.id}" data-v="${k}" aria-pressed="${ans===k}" aria-label="${esc(m.name)}: ${t}">${t}</button>`;
       return `<li class="arow"><button class="aname" data-act="req" data-m="${m.id}"><span class="name">${esc(m.name)}</span>${m.armed?'<span class="dot" title="Armed" aria-label="Armed"></span>':''}
-          <span class="asub">${reqs.length?'Asked for '+esc(reqs.join(', ')):a.answeredAt?'Replied by link':a.manualAt||ans?'Set by hand':'No reply yet'}</span></button>
+          ${(reqs.length||qualText(m))?`<span class="asub">${esc([reqs.length?'Asked for '+reqs.join(', '):'', QUALS.filter(([k])=>m[k]).map(q=>q[2]).join(' · ')].filter(Boolean).join(' · '))}</span>`:''}</button>
         <div class="seg4" role="group" aria-label="${esc(m.name)} availability">${opt('out','Out')}${opt('AM','AM')}${opt('PM','PM')}${opt('both','Both')}</div></li>`;
     };
     const waiting=active.filter(m=>!answerOf(w.avail&&w.avail[m.id])), done=active.filter(m=>answerOf(w.avail&&w.avail[m.id]));
-    body=`${linkCardHtml(w,active)}
+    body=`${SHOW_AVAIL_LINK?linkCardHtml(w,active):''}
       ${waiting.length?`<div class="grp-head"><span>Waiting on ${waiting.length}</span></div><ul class="list">${waiting.map(row).join('')}</ul>`:''}
       ${done.length?`<div class="grp-head"><span>Answered ${done.length}</span></div><ul class="list">${done.map(row).join('')}</ul>`:''}
       <p class="hint">Tap a name to request a specific post. <span class="dot inline"></span> = armed.</p>
@@ -602,10 +607,11 @@ function openSectionLabelSheet(){
 
 function viewRoster(v){
   const act=S.members.filter(m=>m.active!==false), ina=S.members.filter(m=>m.active===false);
-  const row=m=>`<li><button class="row tap${m.active===false?' dim':''}" data-act="member" data-v="${m.id}"><span class="main"><span class="name">${esc(m.name)}</span><span class="tags">${personTags(m)}${m.active===false?'<span class="tag">Inactive</span>':''}</span></span><span class="muted" aria-hidden="true">›</span></button></li>`;
+  const row=m=>`<li><button class="row tap${m.active===false?' dim':''}" data-act="member" data-v="${m.id}"><span class="main"><span class="name">${esc(m.name)}</span><span class="tags">${personTags(m)}${qualTags(m)}${m.active===false?'<span class="tag">Inactive</span>':''}</span></span><span class="muted" aria-hidden="true">›</span></button></li>`;
   const armed=act.filter(m=>m.armed).length;
   v.innerHTML=`<div class="sec-head"><h2 class="sec">Team · ${act.length}</h2>${S.canWrite?'<button class="btn primary" data-act="member" data-v="">Add member</button>':''}</div>
     <div class="stats"><div class="stat"><div class="k">Armed</div><div class="v">${armed} of ${act.length}</div></div><div class="stat"><div class="k">Medical team</div><div class="v">${S.medics.filter(m=>m.active!==false).length}</div></div></div>
+    <div class="stats">${QUALS.map(([k,full])=>`<div class="stat"><div class="k">${full}</div><div class="v">${act.filter(m=>m[k]).length} of ${act.length}</div></div>`).join('')}</div>
     ${S.members.length?`<ul class="list">${act.map(row).join('')}${ina.map(row).join('')}</ul>`:emptyBox('No team members yet','Add each person on the security team and mark who carries.','Add member','member','')}
     <div class="sec-head"><h2 class="sec">Medical team · ${S.medics.filter(m=>m.active!==false).length}</h2>${S.canWrite?'<button class="btn" data-act="medic" data-v="">Add</button>':''}</div>
     ${S.medics.length?`<ul class="list">${S.medics.map(m=>`<li><button class="row tap${m.active===false?' dim':''}" data-act="medic" data-v="${m.id}"><span class="main"><span class="name">${esc(m.name)}</span>${m.active===false?'<span class="tags"><span class="tag">Inactive</span></span>':''}</span><span class="muted" aria-hidden="true">›</span></button></li>`).join('')}</ul>`:'<p class="hint">Medical is its own team. Add them here, then pick who’s on medical each Sunday.</p>'}
@@ -652,7 +658,7 @@ function openAssignSheet(pid){
   const act=S.members.filter(m=>m.active!==false);
   const av=act.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id][svc]), na=act.filter(m=>!(w.avail&&w.avail[m.id]&&w.avail[m.id][svc]));
   const where={}; Object.entries(sched).forEach(([k,m])=>{ if(m){ const pp=S.posts.find(x=>x.id===k); if(pp) where[m]=label(pp); } });
-  const opt=m=>`<option value="${m.id}" ${sched[pid]===m.id?'selected':''}>${esc(m.name)}${m.armed?' · armed':''}${where[m.id]&&sched[pid]!==m.id?' (now '+esc(where[m.id])+')':''}</option>`;
+  const opt=m=>`<option value="${m.id}" ${sched[pid]===m.id?'selected':''}>${esc(m.name)}${m.armed?' · armed':''}${qualText(m)?' · '+esc(qualText(m)):''}${where[m.id]&&sched[pid]!==m.id?' (now '+esc(where[m.id])+')':''}</option>`;
   const duties=(svc==='PM'&&p.dutiesPM)?p.dutiesPM:p.duties;
   const notes=S.settings&&S.settings.notes;
   openSheet(label(p)+' · '+SVC_NAME[svc], `
@@ -689,13 +695,14 @@ function openMemberSheet(id){
   const m=S.members.find(x=>x.id===id)||{name:'',armed:false,med:false,active:true};
   openSheet(id?'Edit member':'Add member', `
     <label class="field"><span>Name as it appears on the schedule</span><input type="text" id="mb-name" value="${esc(m.name)}" placeholder="e.g. David, G." autocomplete="off"></label>
-    <div class="checks">${chk('mb-armed','Armed (carries)',m.armed)}${chk('mb-active','Active on the team',m.active!==false)}</div>
+    <div class="checks">${chk('mb-armed','Armed (carries)',m.armed)}${QUALS.map(([k,full])=>chk('mb-'+k,full,m[k])).join('')}${chk('mb-active','Active on the team',m.active!==false)}</div>
     <div class="actions"><button class="btn" data-act="close">Cancel</button><button class="btn primary" id="mb-save">Save</button></div>
     ${id?'<button class="btn danger block" id="mb-del" data-confirm="Tap again to delete">Delete member</button><p class="hint">Deleting removes them from future schedules. To keep their history, mark them inactive instead.</p>':''}`,
   body=>{
     body.querySelector('#mb-save').onclick=async()=>{
       const name=body.querySelector('#mb-name').value.trim(); if(!name){ toast('Enter a name.'); return; }
       const data={name, armed:body.querySelector('#mb-armed').checked, active:body.querySelector('#mb-active').checked, updatedAt:Date.now()};
+      QUALS.forEach(([k])=>{ data[k]=body.querySelector('#mb-'+k).checked; });
       const ok=await write(()=>id?S.db.doc('members/'+id).set(data):S.db.collection('members').add(data));
       if(ok){ closeSheet(); toast(id?'Saved.':'Added '+name+'.'); }
     };
