@@ -51,7 +51,7 @@ export async function createDb(supabase, email) {
   const notifyAll = () => listeners.forEach((l) => l.fn(l.type === 'doc' ? snapDoc(l.key) : snapColl(l.key)));
 
   supabase
-    .channel('docs-changes')
+    .channel('docs-changes-' + newId())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'docs' }, (payload) => {
       if (payload.eventType === 'DELETE') {
         const p = payload.old && payload.old.path;

@@ -108,7 +108,13 @@ if (!URL_ || !KEY) {
   }
   let recovering = /type=recovery/.test(location.hash);
 
-  async function enter(session) {
+  let entering = null;
+  function enter(session) {
+    if (started) return Promise.resolve();
+    if (!entering) entering = enterOnce(session).finally(() => { entering = null; });
+    return entering;
+  }
+  async function enterOnce(session) {
     if (started) return;
     const email = (session.user.email || '').toLowerCase();
     view.innerHTML = '<p class="muted">Loading roster…</p>';
