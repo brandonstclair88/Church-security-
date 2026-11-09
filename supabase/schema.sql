@@ -66,3 +66,5 @@ end $$;
 drop trigger if exists only_approved_signups on auth.users;
 create trigger only_approved_signups before insert on auth.users
 for each row execute function public.only_approved_signups();
+
+-- 8. Weekly group chat availability link: see 03_availability_links.sql (run it too).

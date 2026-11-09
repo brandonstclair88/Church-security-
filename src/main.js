@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { createDb } from './db.js';
 import { start, toast, esc } from './app.js';
+import { renderPublic } from './public.js';
 
 const URL_ = String(import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '').replace(/\/(rest|auth)\/v1.*$/, '').replace(/\/+$/, '');
 const KEY = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim().replace(/^["']|["']$/g, '');
@@ -15,6 +16,7 @@ if (!URL_ || !KEY) {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' },
   });
   let started = false;
+  const availToken = new URLSearchParams(location.search).get('a');
 
   const signOut = async () => { await supabase.auth.signOut(); location.replace(location.origin); };
 
@@ -126,9 +128,26 @@ if (!URL_ || !KEY) {
       add: async (em, r) => { const { error: e } = await supabase.from('allowed_emails').upsert({ email: em, role: r }); if (e) throw e; },
       remove: async (em) => { const { error: e } = await supabase.from('allowed_emails').delete().eq('email', em); if (e) throw e; },
     };
-    start({ db, email, role, access, signOut });
+    const randomToken = () => { const a = new Uint8Array(18); crypto.getRandomValues(a); return Array.from(a, (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'[b % 56]).join(''); };
+    const links = {
+      get: async (week) => {
+        const { data, error: e } = await supabase.from('avail_links').select('token').eq('week', week).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(1);
+        if (e) throw e; return data && data[0] ? data[0].token : null;
+      },
+      create: async (week) => {
+        const [y, m, d] = week.split('-').map(Number);
+        const expires = new Date(y, m - 1, d + 1, 12).toISOString();
+        const token = randomToken();
+        const { error: e } = await supabase.from('avail_links').insert({ token, week, expires_at: expires, created_by: email });
+        if (e) throw e; return token;
+      },
+    };
+    start({ db, email, role, access, signOut, links });
   }
 
+  if (availToken) {
+    renderPublic(supabase, availToken, toast);
+  } else {
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') { recovering = true; setTimeout(() => showSignIn('newpw'), 0); return; }
     if (event === 'SIGNED_OUT') { started = false; showSignIn('signin'); return; }
@@ -140,4 +159,5 @@ if (!URL_ || !KEY) {
     else if (/error_description/.test(location.hash)) { showSignIn('signin', '', 'That link expired or was already used. Sign in with your password, or tap “Forgot password?”'); history.replaceState(null, '', location.pathname); }
     else if (!location.hash.includes('access_token')) showSignIn('signin');
   });
+  }
 }

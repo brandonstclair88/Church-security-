@@ -11,7 +11,7 @@ function shiftDate(s,days){ const [y,m,dd]=s.split('-').map(Number); const d=new
 function fmtDate(s,opt){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d,12).toLocaleDateString(undefined,opt||{weekday:'short',month:'short',day:'numeric'}); }
 
 const S = {
-  db:null, me:null, role:null, access:null, signOut:null, canWrite:true, noDb:false, accessList:null,
+  db:null, me:null, role:null, access:null, links:null, linkState:{}, signOut:null, canWrite:true, noDb:false, accessList:null,
   loaded:{members:false,posts:false,weeks:false}, medics:[],
   members:[], posts:[], settings:null, weeks:{}, profiles:{},
   tab:'sunday', date:defaultSunday(), mode:'avail', svc:'AM', editMap:false, layout:null, selSec:null, selPt:null, mirror:true, withDuties:false, dragging:false, pendingRender:false
@@ -312,6 +312,29 @@ function render(){
   document.querySelectorAll('select[id^="med-sel-"]').forEach(ms=>{ ms.onchange=()=>{ if(!guard()) return; const sv=ms.dataset.svc; const w=editableWeek(); w.med=w.med||{}; if(ms.value) w.med[sv]=ms.value; else delete w.med[sv]; touchWeek(); render(); }; });
 }
 
+/* ---------- availability link ---------- */
+function linkUrl(token){ return location.origin+'/?a='+encodeURIComponent(token); }
+function loadLink(date){
+  if(!S.links || S.linkState[date]!==undefined) return;
+  S.linkState[date]='loading';
+  S.links.get(date).then(t=>{ S.linkState[date]=t||null; render(); }).catch(()=>{ S.linkState[date]=null; render(); });
+}
+function weeklyMessage(date, token){
+  return `Who's available for security on ${fmtDate(date,{weekday:'long',month:'short',day:'numeric'})}? Tap your name and pick AM, PM, both, or out:\n${linkUrl(token)}`;
+}
+function linkCardHtml(w, active){
+  loadLink(S.date);
+  const st=S.linkState[S.date];
+  const replied=active.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id].answeredAt).length;
+  if(st===undefined||st==='loading') return `<div class="card"><strong>Group chat link</strong><p class="hint">Checking for this week’s link…</p></div>`;
+  if(!st) return `<div class="card"><div class="sec-head"><strong>Group chat link</strong></div>
+    <p class="hint">Make a link for this Sunday and post it in the group chat. Each person taps their name and picks AM, PM, both, or out. The link stops working the day after this Sunday.</p>
+    <button class="btn primary" data-act="mklink">Create link for ${esc(fmtDate(S.date))}</button></div>`;
+  return `<div class="card"><div class="sec-head"><strong>Group chat link</strong><span class="small muted">${replied} of ${active.length} replied</span></div>
+    <div class="actions"><button class="btn primary" data-act="cpmsg">Copy group chat message</button><button class="btn" data-act="cplink">Copy link only</button></div>
+    <pre class="text" id="link-msg">${esc(weeklyMessage(S.date, st))}</pre></div>`;
+}
+
 function viewSunday(v){
   const w=week();
   const active=S.members.filter(m=>m.active!==false);
@@ -331,11 +354,11 @@ function viewSunday(v){
     const rows=active.map(m=>{
       const a=(w.avail&&w.avail[m.id])||{};
       const reqs=SVCS.filter(s=>a['req'+s]&&byId[a['req'+s]]).map(s=>s+' '+byId[a['req'+s]].code);
-      return `<li class="row"><div class="main"><span class="name">${esc(m.name)}</span><span class="tags">${personTags(m)}</span>${reqs.length?`<div class="sub">Asked for ${esc(reqs.join(', '))}</div>`:''}</div>
+      return `<li class="row"><div class="main"><span class="name">${esc(m.name)}</span><span class="tags">${personTags(m)}${a.answeredAt?'<span class="tag med">Replied</span>':''}</span>${reqs.length?`<div class="sub">Asked for ${esc(reqs.join(', '))}</div>`:''}</div>
         <button class="req-btn" data-act="req" data-m="${m.id}">Request</button>
         ${SVCS.map(s=>`<button class="tog" data-act="av" data-m="${m.id}" data-s="${s}" aria-pressed="${!!a[s]}" aria-label="${esc(m.name)} ${SVC_NAME[s]}">${s}</button>`).join('')}</li>`;
     }).join('');
-    body=`<div class="sec-head"><span class="small muted">Tap AM / PM to match the thumbs replies.</span>
+    body=`${linkCardHtml(w,active)}<div class="sec-head"><span class="small muted">Answers from the link fill in here. You can still tap AM / PM by hand.</span>
       <div class="actions"><button class="btn" data-act="allav" data-v="AM">All AM</button><button class="btn" data-act="allav" data-v="PM">All PM</button></div></div>
       <ul class="list">${rows}</ul>
       ${medHtml(w)}
@@ -809,6 +832,9 @@ const ACTS={
   notes:()=>openNotesSheet(),
   rules:()=>openRulesSheet(),
   export:()=>doExport(),
+  mklink:async()=>{ if(!guard()||!S.links) return; try{ const t=await S.links.create(S.date); S.linkState[S.date]=t; render(); toast('Link created. Copy the message into the group chat.'); }catch{ toast('Couldn’t create the link. Try again.'); } },
+  cpmsg:()=>{ const t=S.linkState[S.date]; if(t) copyText(weeklyMessage(S.date,t),'link-msg'); },
+  cplink:()=>{ const t=S.linkState[S.date]; if(t) copyText(linkUrl(t),'link-msg'); },
   import:()=>openImportSheet(),
   accadd:()=>openAccessSheet(),
   accdel:el=>armConfirm(el,async()=>{ try{ await S.access.remove(el.dataset.v); toast('Removed.'); loadAccess(); }catch{ toast('Couldn’t remove that email.'); } }),
@@ -838,7 +864,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 /* ---------- boot ---------- */
 function onErr(e){ toast('Lost connection to saved data. Reload to reconnect.'); }
 export function start(ctx){
-  S.db=ctx.db; S.me=ctx.email; S.role=ctx.role; S.access=ctx.access; S.signOut=ctx.signOut; S.canWrite=true;
+  S.db=ctx.db; S.links=ctx.links||null; S.me=ctx.email; S.role=ctx.role; S.access=ctx.access; S.signOut=ctx.signOut; S.canWrite=true;
   document.getElementById('tabs').hidden=false;
   render();
   const db=S.db;

@@ -7,7 +7,8 @@ Stack: Vite (vanilla JS) · Supabase (auth + Postgres + realtime) · Vercel.
 
 ## Setup
 
-1. **Supabase**: create a project. In SQL Editor, run `supabase/schema.sql`.
+1. **Supabase**: create a project. In SQL Editor, run `supabase/schema.sql`,
+   then `supabase/03_availability_links.sql`.
    - Authentication → URL Configuration: set **Site URL** to your Vercel URL
      and add it under **Redirect URLs**.
    - People sign in with email + password. The first time, they tap
@@ -20,6 +21,9 @@ Stack: Vite (vanilla JS) · Supabase (auth + Postgres + realtime) · Vercel.
 4. Add other people under **Roster → App access**.
 
 ## Notes
+
+- Weekly availability: on the Sunday tab, create the group chat link and paste the
+  message into the chat. People tap their name and pick AM/PM; no sign-in.
 
 - Data is not stored in this repo. Only approved emails can read it (row-level security).
 - `api/keepalive.js` runs daily via Vercel Cron so the free Supabase project doesn't pause.
