@@ -28,3 +28,16 @@ Stack: Vite (vanilla JS) · Supabase (auth + Postgres + realtime) · Vercel.
 - Data is not stored in this repo. Only approved emails can read it (row-level security).
 - `api/keepalive.js` runs daily via Vercel Cron so the free Supabase project doesn't pause.
 - Use **History → Export backup** now and then.
+
+## Automatic weekly group chat message (iPhone Shortcut)
+
+`/api/weekly-message?key=SHORTCUT_KEY` returns this Sunday's availability message
+(and creates the link if needed). It returns nothing while the group chat link is
+turned off in the app (Roster tab).
+
+Vercel env vars: `SHORTCUT_KEY` (long random string) and `SUPABASE_SERVICE_ROLE_KEY`
+(Supabase secret key). Redeploy after adding them.
+
+On the sending iPhone: Shortcuts → Automation → New → Time of Day (Saturday 9:00 AM,
+Weekly, Run Immediately) → actions: Get Contents of URL (the address above) →
+If "Contents of URL" has any value → Send Message (Contents of URL) to the group.
