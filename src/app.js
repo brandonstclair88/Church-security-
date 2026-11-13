@@ -24,8 +24,8 @@ function label(p){ return p.seat ? '('+p.code+')' : p.code; }
 function blankWeek(){ return {date:S.date, avail:{}, sched:{AM:{},PM:{}}, locks:{AM:{},PM:{}}}; }
 function week(){ return S.weeks[S.date] || blankWeek(); }
 const QUALS=[['churchKey','Church key','Key'],['doorApp','Door app','Door'],['gateApp','Gate app','Gate'],['medTrained','Medical training','Med']];
-// Set to true to bring back the group chat availability link on the Sunday page.
-const SHOW_AVAIL_LINK=false;
+// The group chat availability link is turned on or off in the app (Roster tab → Group chat link).
+const showAvailLink=()=>!!(S.settings&&S.settings.availLink);
 function personTags(m){ if(!m) return ''; return m.armed?'<span class="tag armed">Armed</span>':''; }
 function qualTags(m){ if(!m) return ''; return QUALS.filter(([k])=>m[k]).map(([,,short])=>`<span class="tag">${short}</span>`).join(''); }
 function qualText(m){ return QUALS.filter(([k])=>m&&m[k]).map(([,,short])=>short.toLowerCase()).join(' · '); }
@@ -377,7 +377,7 @@ function viewSunday(v){
         <div class="seg4" role="group" aria-label="${esc(m.name)} availability">${opt('out','Out')}${opt('AM','AM')}${opt('PM','PM')}${opt('both','Both')}</div></li>`;
     };
     const waiting=active.filter(m=>!answerOf(w.avail&&w.avail[m.id])), done=active.filter(m=>answerOf(w.avail&&w.avail[m.id]));
-    body=`${SHOW_AVAIL_LINK?linkCardHtml(w,active):''}
+    body=`${showAvailLink()?linkCardHtml(w,active):''}
       ${waiting.length?`<div class="grp-head"><span>Waiting on ${waiting.length}</span></div><ul class="list">${waiting.map(row).join('')}</ul>`:''}
       ${done.length?`<div class="grp-head"><span>Answered ${done.length}</span></div><ul class="list">${done.map(row).join('')}</ul>`:''}
       <p class="hint">Tap a name to request a specific post. Tap a highlighted choice again to clear it. <span class="dot inline"></span> = armed.</p>
@@ -864,6 +864,9 @@ function accessHtml(){
     ${rows}
     ${invitesHtml()}
     <p class="hint">Only these emails can sign in and see the roster, including who is armed. Editors can change schedules; admins can also manage access.</p>
+    <div class="card"><div class="sec-head"><strong>Group chat availability link</strong><span class="pill${showAvailLink()?' ok':''}">${showAvailLink()?'On':'Off'}</span></div>
+      <p class="hint" style="margin:0">When on, the Sunday tab shows a “Copy message” button with a link. People tap their name and pick AM, PM, both, or out, with no sign-in. Their answers fill in automatically, and you can still mark people by hand.</p>
+      ${S.canWrite?`<button class="btn" data-act="linktoggle">${showAvailLink()?'Turn off':'Turn on'}</button>`:''}</div>
     <button class="btn block" data-act="insthow">Install on your phone</button>
     <div class="sec-head"><span class="small muted" style="overflow-wrap:anywhere">Signed in as ${esc(S.me||'')}</span><button class="btn" data-act="signout">Sign out</button></div>`;
 }
@@ -912,6 +915,8 @@ const ACTS={
   import:()=>openImportSheet(),
   accadd:()=>openAccessSheet(),
   insthow:()=>openInstallSheet(),
+  linktoggle:async()=>{ if(!guard()) return; const on=!showAvailLink(); const data={...(S.settings||{}), availLink:on, updatedAt:Date.now(), updatedBy:S.me||null};
+    if(await write(()=>S.db.doc('settings/team').set(JSON.parse(JSON.stringify(data))))) toast(on?'Group chat link turned on. Find it on the Sunday tab.':'Group chat link turned off.'); },
   instgo:async()=>{ const ev=deferredInstall; if(!ev){ openInstallSheet(); return; } deferredInstall=null; try{ ev.prompt(); const r=await ev.userChoice; if(r&&r.outcome==='accepted'){ try{ localStorage.setItem(INSTALL_KEY,'installed'); }catch{} toast('Installed. Open it from your home screen.'); } }catch{ openInstallSheet(); } render(); },
   instlater:()=>{ try{ localStorage.setItem(INSTALL_KEY,String(Date.now()+14*864e5)); }catch{} render(); toast('Hidden for two weeks. Steps are at the bottom of the Roster tab.'); },
   instdone:()=>{ try{ localStorage.setItem(INSTALL_KEY,'installed'); }catch{} closeSheet(); render(); toast('Great. Open it from your home screen from now on.'); },
