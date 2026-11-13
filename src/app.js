@@ -974,7 +974,7 @@ function openInstallSheet(){
   const site=(typeof SITE_URL!=='undefined'?SITE_URL:location.origin).replace(/^https?:\/\//,'');
   const iphone=`<div class="inst-steps"><h3>iPhone</h3><ol>
       ${k==='ios-other'?`<li>This page is open in another app’s browser. Open <strong>Safari</strong> and go to <strong>${esc(site)}</strong>.</li>`:'<li>Make sure this page is open in <strong>Safari</strong>.</li>'}
-      <li>Tap the <strong>Share</strong> button ${SHARE_ICON} at the bottom of the screen (on iPad it’s at the top).</li>
+      <li>Tap the <strong>Share</strong> button ${SHARE_ICON} at the bottom of the screen (on iPad it’s at the top). If you don’t see it, tap the three dots <strong>⋯</strong> first, then <strong>Share</strong>.</li>
       <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
       <li>Tap <strong>Add</strong>. The shield icon appears on your home screen.</li></ol></div>`;
   const android=`<div class="inst-steps"><h3>Android</h3><ol>
