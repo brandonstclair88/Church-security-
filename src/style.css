@@ -222,3 +222,14 @@ main:has(.sharebar){padding-bottom:110px}
 .tour-actions{display:flex;align-items:center;gap:8px;margin-top:6px}
 .tour-actions .btn{min-height:40px}
 .tour-dim{position:fixed;background:rgba(8,12,10,.6)}
+
+/* install on your phone */
+.install-card{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center;background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--r);padding:12px}
+.install-icon img{display:block;border-radius:10px}
+.install-text{display:grid;gap:2px;min-width:0}
+.install-text strong{font-size:15px}
+.install-text span{font-size:13px;color:var(--muted)}
+.install-actions{grid-column:1/-1;display:flex;align-items:center;gap:8px}
+.install-actions .btn{flex:1}
+.inst-steps h3{margin:0 0 4px;font-size:16px}
+.inst-steps ol{margin:0;padding-left:22px;display:grid;gap:6px;font-size:15px;line-height:1.4}

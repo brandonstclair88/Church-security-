@@ -415,7 +415,7 @@ function viewSunday(v){
         <div class="sharebar"><div class="sharebar-in"><button class="btn primary" data-act="mapimg">Share schedule</button><button class="btn" data-act="dutiesimg">Share duties</button></div></div>`;
     }
   }
-  v.innerHTML=datebar+status+steps+body;
+  v.innerHTML=installCardHtml()+datebar+status+steps+body;
 }
 
 const VB={w:380,h:334}, AX=190;
@@ -864,6 +864,7 @@ function accessHtml(){
     ${rows}
     ${invitesHtml()}
     <p class="hint">Only these emails can sign in and see the roster, including who is armed. Editors can change schedules; admins can also manage access.</p>
+    <button class="btn block" data-act="insthow">Install on your phone</button>
     <div class="sec-head"><span class="small muted" style="overflow-wrap:anywhere">Signed in as ${esc(S.me||'')}</span><button class="btn" data-act="signout">Sign out</button></div>`;
 }
 function openAccessSheet(){
@@ -910,6 +911,10 @@ const ACTS={
   cplink:()=>{ const t=S.linkState[S.date]; if(t) copyText(linkUrl(t),'link-msg'); },
   import:()=>openImportSheet(),
   accadd:()=>openAccessSheet(),
+  insthow:()=>openInstallSheet(),
+  instgo:async()=>{ const ev=deferredInstall; if(!ev){ openInstallSheet(); return; } deferredInstall=null; try{ ev.prompt(); const r=await ev.userChoice; if(r&&r.outcome==='accepted'){ try{ localStorage.setItem(INSTALL_KEY,'installed'); }catch{} toast('Installed. Open it from your home screen.'); } }catch{ openInstallSheet(); } render(); },
+  instlater:()=>{ try{ localStorage.setItem(INSTALL_KEY,String(Date.now()+14*864e5)); }catch{} render(); toast('Hidden for two weeks. Steps are at the bottom of the Roster tab.'); },
+  instdone:()=>{ try{ localStorage.setItem(INSTALL_KEY,'installed'); }catch{} closeSheet(); render(); toast('Great. Open it from your home screen from now on.'); },
   invadd:()=>openNewInviteSheet(),
   invshow:el=>openInviteSheet(el.dataset.v),
   invdel:el=>armConfirm(el,async()=>{ try{ await S.invites.revoke(el.dataset.v); toast('Code canceled.'); loadAccess(); }catch{ toast('Couldn’t cancel that code.'); } }),
@@ -937,6 +942,52 @@ document.addEventListener('click',e=>{ const el=e.target.closest('[data-act]'); 
 addEventListener('pagehide',()=>{ flushWeek(); flushLayout(); });
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'){ flushWeek(); flushLayout(); } });
 
+/* ---------- install on your phone ---------- */
+const INSTALL_KEY='ss-install-v1';
+let deferredInstall=null;
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredInstall=e; if(S.db) render(); });
+addEventListener('appinstalled',()=>{ deferredInstall=null; try{ localStorage.setItem(INSTALL_KEY,'installed'); }catch{} if(S.db) render(); });
+function isStandalone(){ try{ return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true; }catch{ return false; } }
+function phoneKind(){
+  const ua=navigator.userAgent||'';
+  const ios=/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1);
+  if(ios) return /CriOS|FxiOS|EdgiOS|GSA\/|FBAN|FBAV|Instagram|Line\//.test(ua)?'ios-other':'ios';
+  if(/Android/.test(ua)) return 'android';
+  return 'desktop';
+}
+function installHidden(){
+  if(isStandalone()||phoneKind()==='desktop') return true;
+  try{ const v=localStorage.getItem(INSTALL_KEY); if(v==='installed') return true; if(v&&Number(v)>Date.now()) return true; }catch{}
+  return false;
+}
+const SHARE_ICON='<svg viewBox="0 0 24 24" width="18" height="18" aria-label="Share" style="vertical-align:-3px"><path d="M12 3v12M8 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 11H5v10h14V11h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function installCardHtml(){
+  if(installHidden()) return '';
+  const k=phoneKind();
+  const primary = k==='android'&&deferredInstall ? '<button class="btn primary" data-act="instgo">Install app</button>' : '<button class="btn primary" data-act="insthow">Show me how</button>';
+  return `<div class="install-card"><div class="install-icon" aria-hidden="true"><img src="/icon-192.png" alt="" width="40" height="40"></div>
+    <div class="install-text"><strong>Put this app on your home screen</strong><span>Opens in one tap, full screen, like a regular app.</span></div>
+    <div class="install-actions">${primary}<button class="req-btn" data-act="instlater">Not now</button></div></div>`;
+}
+function openInstallSheet(){
+  const k=phoneKind();
+  const site=(typeof SITE_URL!=='undefined'?SITE_URL:location.origin).replace(/^https?:\/\//,'');
+  const iphone=`<div class="inst-steps"><h3>iPhone</h3><ol>
+      ${k==='ios-other'?`<li>This page is open in another app’s browser. Open <strong>Safari</strong> and go to <strong>${esc(site)}</strong>.</li>`:'<li>Make sure this page is open in <strong>Safari</strong>.</li>'}
+      <li>Tap the <strong>Share</strong> button ${SHARE_ICON} at the bottom of the screen (on iPad it’s at the top).</li>
+      <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+      <li>Tap <strong>Add</strong>. The shield icon appears on your home screen.</li></ol></div>`;
+  const android=`<div class="inst-steps"><h3>Android</h3><ol>
+      <li>Open this page in <strong>Chrome</strong>.</li>
+      <li>Tap the <strong>⋮</strong> menu in the top right.</li>
+      <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+      <li>Tap <strong>Install</strong>. The shield icon appears with your apps.</li></ol></div>`;
+  const body = k==='android' ? android+iphone : k==='desktop' ? `<p class="hint">Open <strong>${esc(site)}</strong> on your phone, then:</p>`+iphone+android : iphone+android;
+  openSheet('Install on your phone', `${body}
+    <p class="hint">After that, open it from the home screen icon. On iPhone you’ll sign in once more the first time you open it there.</p>
+    <div class="actions"><button class="btn" data-act="close">Close</button>${k!=='desktop'?'<button class="btn primary" data-act="instdone">I’ve installed it</button>':''}</div>`);
+}
+
 /* ---------- in-app tutorial ---------- */
 const TOUR_KEY='ss-tour-done-v1';
 const q1=sel=>document.querySelector(sel);
@@ -956,10 +1007,11 @@ const TOUR=[
   {tab:'roster', admin:true, target:()=>{ const h=[...document.querySelectorAll('h2.sec')].find(x=>/App access/.test(x.textContent)); return h?h.closest('.sec-head'):null; }, title:'Who can sign in', text:'Admins add people here, by email or with a one-time invite code you text them.'},
   {tab:'posts', target:()=>q1('[data-act="tab"][data-v="posts"]'), title:'Posts and duties', text:'Edit what each post does and choose which posts must be armed. Changes show up in the duties picture right away.'},
   {tab:'history', target:()=>q1('[data-act="tab"][data-v="history"]'), title:'History', text:'Past schedules live here, and they drive the rotation. Use Export backup now and then to keep a copy.'},
+  {tab:'sunday', mode:'avail', install:true, target:()=>q1('.install-card'), title:'Put it on your phone', text:'Tap “Show me how” to add this app to your home screen. You can also find the steps any time at the bottom of the Roster tab.'},
   {tab:'sunday', mode:'avail', target:()=>q1('#help-btn'), title:'That’s it', text:'Mark availability, generate, check it, and share. Tap ? any time to see this tour again.'},
 ];
 let tour=null;
-function tourSteps(){ return TOUR.filter(st=>!st.admin||S.role==='admin'); }
+function tourSteps(){ return TOUR.filter(st=>(!st.admin||S.role==='admin')&&(!st.install||!installHidden())); }
 function startTour(){
   if(tour) return;
   closeSheet(); flushWeek();
