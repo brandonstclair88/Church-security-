@@ -965,7 +965,7 @@ function installCardHtml(){
   if(installHidden()) return '';
   const k=phoneKind();
   const primary = k==='android'&&deferredInstall ? '<button class="btn primary" data-act="instgo">Install app</button>' : '<button class="btn primary" data-act="insthow">Show me how</button>';
-  return `<div class="install-card"><div class="install-icon" aria-hidden="true"><img src="/icon-192.png" alt="" width="40" height="40"></div>
+  return `<div class="install-card"><div class="install-icon" aria-hidden="true"><img src="/icon-v2-192.png" alt="" width="40" height="40"></div>
     <div class="install-text"><strong>Put this app on your home screen</strong><span>Opens in one tap, full screen, like a regular app.</span></div>
     <div class="install-actions">${primary}<button class="req-btn" data-act="instlater">Not now</button></div></div>`;
 }
