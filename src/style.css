@@ -233,3 +233,6 @@ main:has(.sharebar){padding-bottom:110px}
 .install-actions .btn{flex:1}
 .inst-steps h3{margin:0 0 4px;font-size:16px}
 .inst-steps ol{margin:0;padding-left:22px;display:grid;gap:6px;font-size:15px;line-height:1.4}
+
+/* Keep iPhone Safari from zooming in when a text box is tapped (it zooms for text under 16px). */
+input, select, textarea { font-size: 16px !important; }
