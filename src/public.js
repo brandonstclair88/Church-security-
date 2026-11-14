@@ -50,7 +50,7 @@ export async function renderPublic(supabase, token, toast) {
     };
     return `<div class="card" style="gap:10px"><strong>Request a specific post (optional)</strong>
       ${sel('AM', 'Morning')}${sel('PM', 'Evening')}
-      <p class="hint" style="margin:0">Requests are filled when possible. The schedule still has the final say.</p></div>`;
+      <p class="hint" style="margin:0">Requests are filled when possible.</p></div>`;
   }
 
   function draw() {
