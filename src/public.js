@@ -48,7 +48,7 @@ export async function renderPublic(supabase, token, toast) {
       const cur = a['req' + svc] || '';
       return `<label class="field"><span>${label}</span><select data-pubreq="${svc}"><option value="">No preference</option>${ps.map((p) => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(/^\d+$/.test(p.code) ? '(' + p.code + ')' : p.code)}${p.name ? ' · ' + esc(p.name) : ''}</option>`).join('')}</select></label>`;
     };
-    return `<div class="card" style="gap:10px"><strong>Want a specific post? (optional)</strong>
+    return `<div class="card" style="gap:10px"><strong>Request a specific post (optional)</strong>
       ${sel('AM', 'Morning')}${sel('PM', 'Evening')}
       <p class="hint" style="margin:0">Requests are filled when possible. The schedule still has the final say.</p></div>`;
   }
