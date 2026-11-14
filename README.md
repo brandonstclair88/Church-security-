@@ -41,3 +41,13 @@ Vercel env vars: `SHORTCUT_KEY` (long random string) and `SUPABASE_SERVICE_ROLE_
 On the sending iPhone: Shortcuts → Automation → New → Time of Day (Saturday 9:00 AM,
 Weekly, Run Immediately) → actions: Get Contents of URL (the address above) →
 If "Contents of URL" has any value → Send Message (Contents of URL) to the group.
+
+## Automatic Saturday-night schedule picture (iPhone Shortcut)
+
+`/api/weekly-schedule?key=SHORTCUT_KEY` returns tomorrow's schedule picture (PNG),
+but only after someone taps **Mark final** on the schedule. Otherwise it returns
+nothing. Regenerating a schedule clears "final".
+
+Second automation on the sending iPhone: Time of Day, Saturday 8:30 PM, Weekly,
+Run Immediately → Get Contents of URL (the address above) → If "Contents of URL"
+has any value → Send Message (Contents of URL) to the group.

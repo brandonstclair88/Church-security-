@@ -1,3 +1,4 @@
+import { DEFAULT_LAYOUT, buildScheduleSvg } from './schedule-image.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -55,7 +56,7 @@ function editableWeek(){
   let w=S.weeks[S.date];
   if(!w || !localW.has(w)){
     const b = w ? JSON.parse(JSON.stringify(w)) : {};
-    w = {date:S.date, avail:b.avail||{}, sched:{AM:{},PM:{},...(b.sched||{})}, locks:{AM:{},PM:{},...(b.locks||{})}, med:{...(b.med||{})}, generatedAt:b.generatedAt||null};
+    w = {...b, date:S.date, avail:b.avail||{}, sched:{AM:{},PM:{},...(b.sched||{})}, locks:{AM:{},PM:{},...(b.locks||{})}, med:{...(b.med||{})}, generatedAt:b.generatedAt||null};
     localW.add(w); S.weeks[S.date]=w;
   }
   return w;
@@ -66,7 +67,7 @@ function flushWeek(){
   clearTimeout(wTimer);
   if(!wDate || wSaved>=wSeq || !S.db) return wChain;
   const date=wDate, seq=wSeq, w=S.weeks[date];
-  const body = JSON.parse(JSON.stringify({date, avail:w.avail, sched:w.sched, locks:w.locks, med:w.med||{}, generatedAt:w.generatedAt||null, updatedAt:Date.now(), updatedBy:S.me||null}));
+  const body = JSON.parse(JSON.stringify({...w, date, avail:w.avail, sched:w.sched, locks:w.locks, med:w.med||{}, generatedAt:w.generatedAt||null, final:!!w.final, updatedAt:Date.now(), updatedBy:S.me||null}));
   wChain = wChain.then(async()=>{
     try{ await withRetry(()=>S.db.doc('weeks/'+date).set(body)); }
     catch(e){ toast(errMsg(e)); }
@@ -137,7 +138,7 @@ function generateAll(){
   w.sched.AM=genService('AM',w,stats,{});
   const am={}; Object.values(w.sched.AM).forEach(m=>{ if(m) am[m]=1; });
   w.sched.PM=genService('PM',w,stats,am);
-  w.generatedAt=Date.now();
+  w.generatedAt=Date.now(); w.final=false;
   touchWeek(); S.mode='sched'; render();
   const issues=SVCS.reduce((n,s)=>n+checkService(s,w).length,0);
   toast(issues ? 'Schedule generated. Review the warnings.' : 'Schedule generated.');
@@ -192,60 +193,7 @@ const IMG_COL={bg:'#FFFFFF',room:'#F3F5F2',wall:'#56655C',sec:'#DDE4DE',secLine:
 function wrapText(t,max){ const words=String(t).split(/\s+/).filter(Boolean), out=[]; let line='';
   words.forEach(w=>{ if((line+' '+w).trim().length>max && line){ out.push(line); line=w; } else line=(line?line+' ':'')+w; }); if(line) out.push(line); return out; }
 function mapImageSvg(w){
-  const withD=false;
-  const L=layout(), mm=memberMap(), F='Helvetica, Arial, sans-serif';
-  const DEF={'1':[76,154],'2':[144,156],'3':[236,156],'4':[304,154],'5':[140,257],'6':[240,257]};
-  const order=['room','stage','section','fixture','door'];
-  const shapes=[...L.shapes].sort((a,b)=>order.indexOf(a.kind)-order.indexOf(b.kind));
-  const drawShapes=shapes.map(sh=>{
-    const pts=ptsStr(sh);
-    if(sh.kind==='door') return `<polyline points="${pts}" fill="none" stroke="${IMG_COL.door}" stroke-width="4" stroke-linecap="round"/>`;
-    const st = sh.kind==='room' ? `fill="${IMG_COL.room}" stroke="${IMG_COL.wall}" stroke-width="1.5"`
-      : sh.kind==='fixture' ? `fill="none" stroke="${IMG_COL.wall}" stroke-width="1"`
-      : `fill="${IMG_COL.sec}" stroke="${IMG_COL.secLine}" stroke-width="${sh.kind==='stage'?1:.5}"`;
-    const c=centroid(sh);
-    const lbl=(sh.label&&(sh.kind==='stage'||sh.kind==='section'))?`<text x="${c[0].toFixed(0)}" y="${(c[1]+3.5).toFixed(0)}" text-anchor="middle" font-family="${F}" font-size="10" font-weight="700" letter-spacing="2" fill="${IMG_COL.muted}">${esc(String(sh.label).toUpperCase())}</text>`:'';
-    return `<polygon points="${pts}" ${st}/>${lbl}`;
-  }).join('');
-  const svcs=SVCS.filter(sv=>postsFor(sv).length && Object.values((w.sched&&w.sched[sv])||{}).some(Boolean));
-  let y=0, out='';
-  const T=(x,yy,txt,size,weight,fill,anchor)=>`<text x="${x}" y="${yy}" font-family="${F}" font-size="${size}" font-weight="${weight||400}" fill="${fill||IMG_COL.ink}"${anchor?` text-anchor="${anchor}"`:''}>${esc(txt)}</text>`;
-  y+=26; out+=T(16,y,'Security posts · '+fmtDate(w.date||S.date),16,700); y+=8;
-  svcs.forEach(svc=>{
-    const sched=(w.sched&&w.sched[svc])||{}, posts=postsFor(svc);
-    y+=24; out+=`<rect x="0" y="${y-17}" width="${VB.w}" height="24" fill="${IMG_COL.chip}"/>`+T(16,y,SVC_NAME[svc]+' service ('+svc+')',14,700);
-    y+=8;
-    const seats=posts.filter(p=>p.seat);
-    if(seats.length){
-      const mk=seats.map(p=>{ const d=DEF[p.code]||[190,160]; const x=p.x??d[0], yy=p.y??d[1]; const m=mm[sched[p.id]];
-        return `<g transform="translate(${x} ${yy})"><circle r="13" fill="${m?IMG_COL.mk:IMG_COL.mkEmpty}" stroke="#FFFFFF" stroke-width="2"/><text text-anchor="middle" y="4.5" font-family="${F}" font-size="12" font-weight="700" fill="#FFFFFF">${esc(p.code)}</text><text text-anchor="middle" y="28" font-family="${F}" font-size="11" font-weight="700" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="3.5" stroke-linejoin="round">${esc(m?m.name:'Open')}</text><text text-anchor="middle" y="28" font-family="${F}" font-size="11" font-weight="700" fill="${IMG_COL.ink}">${esc(m?m.name:'Open')}</text></g>`; }).join('');
-      let maxY=0; L.shapes.forEach(sh=>sh.pts.forEach(q=>{ if(q[1]>maxY) maxY=q[1]; })); seats.forEach(p=>{ const d=DEF[p.code]||[190,160]; const yy=(p.y??d[1])+32; if(yy>maxY) maxY=yy; });
-      out+=`<g transform="translate(0 ${y})">${drawShapes}${mk}</g>`; y+=Math.min(VB.h,maxY+6);
-    }
-    const sameAsAM = svc==='PM' && posts.every(p=>!p.dutiesPM && (p.services||[]).includes('AM'));
-    if(withD && sameAsAM){ y+=16; out+=T(16,y,'Duties are the same as the morning service.',11,400,IMG_COL.muted); }
-    posts.forEach(p=>{
-      const m=mm[sched[p.id]];
-      y+=10; out+=`<line x1="16" y1="${y}" x2="${VB.w-16}" y2="${y}" stroke="${IMG_COL.rule}" stroke-width="0.5"/>`;
-      y+=18;
-      out+=`<rect x="16" y="${y-13}" width="34" height="18" rx="4" fill="${IMG_COL.chip}"/>`+T(33,y,label(p),11,700,IMG_COL.ink,'middle')+T(58,y,m?m.name:'Open',13,700,m?IMG_COL.ink:IMG_COL.mkEmpty);
-      if(withD && !sameAsAM){
-        const d = svc==='PM' ? (p.dutiesPM || ((p.services||[]).includes('AM')?'':p.duties)) : p.duties;
-        if(d) wrapText(d.replace(/\s*\n\s*/g,' '),56).forEach(ln=>{ y+=14; out+=T(58,y,ln,10.5,400,IMG_COL.muted); });
-      }
-    });
-    const md=medicName(w,svc);
-    if(md){ y+=10; out+=`<line x1="16" y1="${y}" x2="${VB.w-16}" y2="${y}" stroke="${IMG_COL.rule}" stroke-width="0.5"/>`; y+=18; out+=`<rect x="16" y="${y-13}" width="34" height="18" rx="4" fill="${IMG_COL.chip}"/>`+T(33,y,'Med',11,700,IMG_COL.ink,'middle')+T(58,y,md,13,700); }
-    const used=new Set(Object.values(sched));
-    const off=S.members.filter(mb=>mb.active!==false && w.avail&&w.avail[mb.id]&&w.avail[mb.id][svc] && !used.has(mb.id));
-    if(off.length){ y+=10; out+=`<line x1="16" y1="${y}" x2="${VB.w-16}" y2="${y}" stroke="${IMG_COL.rule}" stroke-width="0.5"/>`; y+=18; out+=`<rect x="16" y="${y-13}" width="34" height="18" rx="4" fill="${IMG_COL.chip}"/>`+T(33,y,'OFF',11,700,IMG_COL.ink,'middle'); wrapText(off.map(mb=>mb.name).join(', '),48).forEach((ln,k)=>{ if(k) y+=15; out+=T(58,y,ln,12,400); }); }
-    y+=12;
-  });
-  const notes=S.settings&&S.settings.notes;
-  if(withD && notes){ y+=8; out+=`<line x1="16" y1="${y}" x2="${VB.w-16}" y2="${y}" stroke="${IMG_COL.wall}" stroke-width="1"/>`; wrapText(notes.replace(/\s*\n\s*/g,' '),58).forEach(ln=>{ y+=16; out+=T(16,y,ln,11,700); }); y+=6; }
-  y+=16;
-  const SC=3;
-  return {svg:`<svg xmlns="http://www.w3.org/2000/svg" width="${VB.w*SC}" height="${Math.ceil(y)*SC}" viewBox="0 0 ${VB.w} ${Math.ceil(y)}"><rect width="${VB.w}" height="${Math.ceil(y)}" fill="${IMG_COL.bg}"/>${out}</svg>`, count:svcs.length};
+  return buildScheduleSvg({ week:{...w, date:w.date||S.date}, members:S.members, medics:S.medics, posts:S.posts, layout:layout() });
 }
 function dutiesImageSvg(){
   const F='Helvetica, Arial, sans-serif';
@@ -357,7 +305,7 @@ function viewSunday(v){
   const generated=SVCS.some(sv=>Object.values((w.sched&&w.sched[sv])||{}).some(Boolean));
   const issues=generated?SVCS.reduce((n,sv)=>n+checkService(sv,w).length,0):0;
   const cnt=sv=>{ const a=active.filter(m=>w.avail&&w.avail[m.id]&&w.avail[m.id][sv]); return `${a.length} avail · ${a.filter(m=>m.armed).length} armed`; };
-  const statusPill = !generated ? '<span class="pill">Not generated</span>' : issues ? `<span class="pill warn">${issues} to fix</span>` : '<span class="pill ok">Schedule ready</span>';
+  const statusPill = generated&&w.final ? '<span class="pill ok">Ready to send</span>' : !generated ? '<span class="pill">Not generated</span>' : issues ? `<span class="pill warn">${issues} to fix</span>` : '<span class="pill ok">Schedule ready</span>';
   const status=`<div class="status"><div class="status-top"><span><strong>${answered}</strong> of ${active.length} answered</span>${statusPill}</div>
     <div class="status-sub">AM ${cnt('AM')}<span class="sep">|</span>PM ${cnt('PM')}</div></div>`;
   const steps=`<div class="steps" role="group" aria-label="Step">
@@ -399,6 +347,8 @@ function viewSunday(v){
       const md=medicName(w,svc);
       body=`${svcSeg}
         ${warnHtml}
+        <div class="readybar${w.final?' on':''}"><div><strong>${w.final?'Marked final':'Ready to send?'}</strong><div class="small muted">${w.final?'The schedule picture goes to the group chat automatically Saturday at 8:30 PM.':'Mark final when it’s checked. Only final schedules are sent automatically.'}</div></div>
+          ${S.canWrite?`<button class="btn${w.final?'':' primary'}" data-act="final">${w.final?'Undo':'Mark final'}</button>`:''}</div>
         <ul class="list">${posts.map(prow).join('')}
           ${md?`<li><div class="prow static"><span class="code">Med</span><span class="pname">${esc(md)}</span><span class="pwhere">Medical</span></div></li>`:''}
           ${off.length?`<li><div class="prow static"><span class="code">OFF</span><span class="pname muted" style="font-weight:400">${esc(off.map(m=>m.name).join(', '))}</span></div></li>`:''}</ul>
@@ -419,22 +369,7 @@ function viewSunday(v){
 }
 
 const VB={w:380,h:334}, AX=190;
-const DEFAULT_LAYOUT={v:2,shapes:[
-  {id:'room',kind:'room',mirror:'self',pts:[[30,70],[125,40],[255,40],[350,70],[282,298],[98,298]]},
-  {id:'stage',kind:'stage',label:'Stage',mirror:'self',pts:[[125,40],[255,40],[255,74],[190,94],[125,74]]},
-  {id:'piano',kind:'fixture',label:'Piano',pts:[[224,46],[244,46],[244,59],[224,59]]},
-  {id:'pulpit',kind:'fixture',label:'Pulpit',mirror:'self',pts:[[184,78],[196,78],[196,86],[184,86]]},
-  {id:'s1',kind:'section',mirror:'s4',pts:[[42,100],[100,104],[92,208],[74,208]]},
-  {id:'s4',kind:'section',mirror:'s1',pts:[[338,100],[280,104],[288,208],[306,208]]},
-  {id:'s2',kind:'section',mirror:'s3',pts:[[110,104],[182,102],[182,210],[102,212]]},
-  {id:'s3',kind:'section',mirror:'s2',pts:[[270,104],[198,102],[198,210],[278,212]]},
-  {id:'s5',kind:'section',mirror:'s6',pts:[[86,226],[182,224],[182,288],[104,290]]},
-  {id:'s6',kind:'section',mirror:'s5',pts:[[294,226],[198,224],[198,288],[276,290]]},
-  {id:'booth',kind:'fixture',label:'Sound booth',pts:[[248,274],[272,274],[272,286],[248,286]]},
-  {id:'d1',kind:'door',label:'Left door',mirror:'d2',pts:[[72,211],[76,224]]},
-  {id:'d2',kind:'door',label:'Right door',mirror:'d1',pts:[[308,211],[304,224]]},
-  {id:'d3',kind:'door',label:'Front right door',pts:[[347,78],[343,92]]},
-  {id:'d4',kind:'door',label:'Rear door',mirror:'self',pts:[[181,298],[199,298]]}]};
+
 const KIND_NAME={room:'Room walls',stage:'Stage',section:'Seating section',fixture:'Object',door:'Door'};
 const localL=new WeakSet();
 function layout(){ const L=S.layout; return (L&&L.v===2&&Array.isArray(L.shapes))?L:DEFAULT_LAYOUT; }
@@ -894,6 +829,7 @@ const ACTS={
     if(answerOf(a)===k){ delete w.avail[m]; touchWeek(); render(); toast('Cleared. Moved back to “Waiting on.”'); return; }
     a.AM=(k==='AM'||k==='both'); a.PM=(k==='PM'||k==='both'); a.manualAt=Date.now();
     SVCS.forEach(sv=>{ if(!a[sv]) delete a['req'+sv]; }); touchWeek(); render(); },
+  final:()=>{ if(!guard()) return; const w=editableWeek(); w.final=!w.final; w.finalAt=w.final?Date.now():null; w.finalBy=w.final?(S.me||null):null; touchWeek(); render(); toast(w.final?'Marked final. It will send Saturday at 8:30 PM.':'No longer final. It won’t send automatically.'); },
   showmap:()=>{ S.showMap=!S.showMap; S.editMap=false; render(); },
   av:el=>{ if(!guard()) return; const w=editableWeek(), m=el.dataset.m, s=el.dataset.s; w.avail[m]=w.avail[m]||{}; w.avail[m][s]=!w.avail[m][s]; if(!w.avail[m][s]) delete w.avail[m]['req'+s]; touchWeek(); render(); },
   allav:el=>{ if(!guard()) return; const w=editableWeek(), s=el.dataset.v; S.members.filter(m=>m.active!==false).forEach(m=>{ w.avail[m.id]=w.avail[m.id]||{}; w.avail[m.id][s]=true; }); touchWeek(); render(); },

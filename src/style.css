@@ -238,3 +238,7 @@ main:has(.sharebar){padding-bottom:110px}
 input, select, textarea { font-size: 16px !important; }
 
 .status-field{border-top:1px solid var(--line);padding-top:12px}
+
+.readybar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.readybar.on{border-color:var(--accent);background:var(--accent-soft)}
+.readybar .btn{flex:0 0 auto}
