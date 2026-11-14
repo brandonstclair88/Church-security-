@@ -8,7 +8,8 @@ Stack: Vite (vanilla JS) · Supabase (auth + Postgres + realtime) · Vercel.
 ## Setup
 
 1. **Supabase**: create a project. In SQL Editor, run `supabase/schema.sql`,
-   then `supabase/03_availability_links.sql`.
+   then `supabase/03_availability_links.sql`, `04_invite_codes.sql`,
+   and `05_availability_requests.sql`.
    - Authentication → URL Configuration: set **Site URL** to your Vercel URL
      and add it under **Redirect URLs**.
    - People sign in with email + password. The first time, they tap

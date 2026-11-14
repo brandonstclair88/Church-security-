@@ -37,6 +37,22 @@ export async function renderPublic(supabase, token, toast) {
     info = data;
   }
 
+  function requestHtml(me) {
+    const a = (info.avail || {})[me.id];
+    const posts = info.posts || [];
+    if (!a || !a.answered || !(a.AM || a.PM) || !posts.length) return '';
+    const sel = (svc, label) => {
+      if (!a[svc]) return '';
+      const ps = posts.filter((p) => (p.services || []).includes(svc));
+      if (!ps.length) return '';
+      const cur = a['req' + svc] || '';
+      return `<label class="field"><span>${label}</span><select data-pubreq="${svc}"><option value="">No preference</option>${ps.map((p) => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(/^\d+$/.test(p.code) ? '(' + p.code + ')' : p.code)}${p.name ? ' · ' + esc(p.name) : ''}</option>`).join('')}</select></label>`;
+    };
+    return `<div class="card" style="gap:10px"><strong>Want a specific post? (optional)</strong>
+      ${sel('AM', 'Morning')}${sel('PM', 'Evening')}
+      <p class="hint" style="margin:0">Requests are filled when possible. The schedule still has the final say.</p></div>`;
+  }
+
   function draw() {
     if (!info) {
       view.innerHTML = `<div class="empty"><h3>This link has expired</h3><p>Ask in the group chat for this week’s availability link.</p></div>`;
@@ -54,6 +70,7 @@ export async function renderPublic(supabase, token, toast) {
           <div style="display:grid;gap:8px">${CHOICES.map((c) => `<button class="btn${c.key === 'out' ? '' : ' primary'}" style="min-height:52px;font-size:16px" data-pub="choose" data-v="${c.key}">${c.label}</button>`).join('')}</div>
           <p class="hint" style="margin:0">Current answer: <strong>${esc(cur.text)}</strong>. You can change it any time before Sunday.</p>
         </div>
+        ${requestHtml(me)}
         <button class="btn block" data-pub="list">See everyone’s replies</button>`;
     } else {
       const replied = members.filter((m) => avail[m.id] && avail[m.id].answered).length;
@@ -63,6 +80,16 @@ export async function renderPublic(supabase, token, toast) {
         <p class="hint">${replied} of ${members.length} replied. Not on the list? Reply in the group chat instead.</p>`;
     }
   }
+
+  view.addEventListener('change', async (e) => {
+    const el = e.target.closest('[data-pubreq]'); if (!el || !picked) return;
+    el.disabled = true;
+    const { data, error } = await supabase.rpc('avail_request', { p_token: token, p_member: picked, p_svc: el.dataset.pubreq, p_post: el.value || null });
+    if (error || !data) toast(error ? 'Couldn’t save the request. Try again.' : 'Couldn’t save the request. Pick your availability first.');
+    else toast(el.value ? 'Request saved.' : 'Request cleared.');
+    try { await load(); } catch { /* keep view */ }
+    draw();
+  });
 
   view.addEventListener('click', async (e) => {
     const el = e.target.closest('[data-pub]'); if (!el) return;
