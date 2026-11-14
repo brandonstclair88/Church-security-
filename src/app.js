@@ -695,7 +695,8 @@ function openMemberSheet(id){
   const m=S.members.find(x=>x.id===id)||{name:'',armed:false,med:false,active:true};
   openSheet(id?'Edit member':'Add member', `
     <label class="field"><span>Name as it appears on the schedule</span><input type="text" id="mb-name" value="${esc(m.name)}" placeholder="e.g. David, G." autocomplete="off"></label>
-    <div class="checks">${chk('mb-armed','Armed (carries)',m.armed)}${QUALS.map(([k,full])=>chk('mb-'+k,full,m[k])).join('')}${chk('mb-active','Active on the team',m.active!==false)}</div>
+    <div class="field"><span>Qualifications</span><div class="checks">${chk('mb-armed','Armed (carries)',m.armed)}${QUALS.map(([k,full])=>chk('mb-'+k,full,m[k])).join('')}</div></div>
+    <div class="field status-field"><span>Status</span>${chk('mb-active','Active on the team',m.active!==false)}<p class="hint" style="margin:0">Inactive people stay in history but aren’t shown or scheduled.</p></div>
     <div class="actions"><button class="btn" data-act="close">Cancel</button><button class="btn primary" id="mb-save">Save</button></div>
     ${id?'<button class="btn danger block" id="mb-del" data-confirm="Tap again to delete">Delete member</button><p class="hint">Deleting removes them from future schedules. To keep their history, mark them inactive instead.</p>':''}`,
   body=>{
