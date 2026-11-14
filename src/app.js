@@ -23,7 +23,7 @@ function postsFor(svc){ return S.posts.filter(p=>(p.services||[]).includes(svc))
 function label(p){ return p.seat ? '('+p.code+')' : p.code; }
 function blankWeek(){ return {date:S.date, avail:{}, sched:{AM:{},PM:{}}, locks:{AM:{},PM:{}}}; }
 function week(){ return S.weeks[S.date] || blankWeek(); }
-const QUALS=[['churchKey','Church key','Key'],['doorApp','Door app','Door'],['gateApp','Gate app','Gate'],['medTrained','Medical training','Med']];
+const QUALS=[['churchKey','Church key','Key'],['doorApp','Door app','Door'],['gateApp','Gate app','Gate'],['medTrained','Medical training','Med'],['liveScan','Live Scan','Scan']];
 // The group chat availability link is turned on or off in the app (Roster tab → Group chat link).
 const showAvailLink=()=>!!(S.settings&&S.settings.availLink);
 function personTags(m){ if(!m) return ''; return m.armed?'<span class="tag armed">Armed</span>':''; }
