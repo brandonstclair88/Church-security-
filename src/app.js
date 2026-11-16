@@ -13,7 +13,7 @@ function fmtDate(s,opt){ const [y,m,d]=s.split('-').map(Number); return new Date
 
 const S = {
   db:null, me:null, role:null, access:null, links:null, linkState:{}, signOut:null, canWrite:true, noDb:false, accessList:null,
-  loaded:{members:false,posts:false,weeks:false}, medics:[],
+  loaded:{members:false,posts:false,weeks:false}, medics:[], supervisors:[],
   members:[], posts:[], settings:null, weeks:{}, profiles:{},
   tab:'sunday', date:defaultSunday(), mode:'avail', svc:'AM', editMap:false, layout:null, selSec:null, selPt:null, mirror:true, withDuties:false, showMap:false, dragging:false, pendingRender:false
 };
@@ -31,6 +31,7 @@ function personTags(m){ if(!m) return ''; return m.armed?'<span class="tag armed
 function qualTags(m){ if(!m) return ''; return QUALS.filter(([k])=>m[k]).map(([,,short])=>`<span class="tag">${short}</span>`).join(''); }
 function qualText(m){ return QUALS.filter(([k])=>m&&m[k]).map(([,,short])=>short.toLowerCase()).join(' · '); }
 function needsArmed(p,svc){ return Array.isArray(p.armedIn) ? p.armedIn.includes(svc) : !!p.requiresArmed; }
+function supName(w,svc){ const id=w&&w.sup&&w.sup[svc]; const m=id&&S.supervisors.find(x=>x.id===id); return m?m.name:''; }
 function medicName(w,svc){ const id=w&&w.med&&w.med[svc]; const m=id&&S.medics.find(x=>x.id===id); return m?m.name:''; }
 
 /* ---------- toast & errors ---------- */
@@ -177,6 +178,7 @@ function svcText(svc, w, withDuties){
   if(withDuties) lines.push('');
   const used=new Set(Object.values(sched));
   const off=S.members.filter(m=>m.active!==false && w.avail&&w.avail[m.id]&&w.avail[m.id][svc] && !used.has(m.id));
+  const sp=supName(w,svc); if(sp){ if(withDuties) lines.push(''); lines.push('Floor supervisor  '+sp); }
   const md=medicName(w,svc); if(md){ if(withDuties) lines.push(''); lines.push('Medical  '+md); }
   if(off.length) lines.push('OFF  '+off.map(m=>m.name).join(', '));
   return lines.join('\n');
@@ -193,7 +195,7 @@ const IMG_COL={bg:'#FFFFFF',room:'#F3F5F2',wall:'#56655C',sec:'#DDE4DE',secLine:
 function wrapText(t,max){ const words=String(t).split(/\s+/).filter(Boolean), out=[]; let line='';
   words.forEach(w=>{ if((line+' '+w).trim().length>max && line){ out.push(line); line=w; } else line=(line?line+' ':'')+w; }); if(line) out.push(line); return out; }
 function mapImageSvg(w){
-  return buildScheduleSvg({ week:{...w, date:w.date||S.date}, members:S.members, medics:S.medics, posts:S.posts, layout:layout() });
+  return buildScheduleSvg({ week:{...w, date:w.date||S.date}, members:S.members, medics:S.medics, supervisors:S.supervisors, posts:S.posts, layout:layout() });
 }
 function dutiesImageSvg(){
   const F='Helvetica, Arial, sans-serif';
@@ -262,6 +264,7 @@ function render(){
   if(!S.loaded.members||!S.loaded.posts||!S.loaded.weeks){ v.innerHTML='<p class="muted">Loading roster…</p>'; return; }
   ({sunday:viewSunday, roster:viewRoster, posts:viewPosts, history:viewHistory})[S.tab](v);
   if((S.tab==='sunday' && S.mode==='sched') || S.tab==='posts') bindMap();
+  document.querySelectorAll('select[id^="sup-sel-"]').forEach(ms=>{ ms.onchange=()=>{ if(!guard()) return; const sv=ms.dataset.svc; const w=editableWeek(); w.sup=w.sup||{}; if(ms.value) w.sup[sv]=ms.value; else delete w.sup[sv]; touchWeek(); render(); }; });
   document.querySelectorAll('select[id^="med-sel-"]').forEach(ms=>{ ms.onchange=()=>{ if(!guard()) return; const sv=ms.dataset.svc; const w=editableWeek(); w.med=w.med||{}; if(ms.value) w.med[sv]=ms.value; else delete w.med[sv]; touchWeek(); render(); }; });
 }
 
@@ -329,6 +332,7 @@ function viewSunday(v){
       ${waiting.length?`<div class="grp-head"><span>Waiting on ${waiting.length}</span></div><ul class="list">${waiting.map(row).join('')}</ul>`:''}
       ${done.length?`<div class="grp-head"><span>Answered ${done.length}</span></div><ul class="list">${done.map(row).join('')}</ul>`:''}
       <p class="hint">Tap a name to request a specific post. Tap a highlighted choice again to clear it. <span class="dot inline"></span> = armed.</p>
+      ${supHtml(w)}
       ${medHtml(w)}
       <button class="btn primary block big" data-act="gen">${generated?'Regenerate schedule':'Generate schedule'}</button>`;
   } else {
@@ -350,6 +354,7 @@ function viewSunday(v){
         <div class="readybar${w.final?' on':''}"><div><strong>${w.final?'Marked final':'Ready to send?'}</strong><div class="small muted">${w.final?'The schedule picture goes to the group chat automatically Saturday at 8:30 PM.':'Mark final when it’s checked. Only final schedules are sent automatically.'}</div></div>
           ${S.canWrite?`<button class="btn${w.final?'':' primary'}" data-act="final">${w.final?'Undo':'Mark final'}</button>`:''}</div>
         <ul class="list">${posts.map(prow).join('')}
+          ${supName(w,svc)?`<li><div class="prow static"><span class="code">Sup</span><span class="pname">${esc(supName(w,svc))}</span><span class="pwhere">Floor supervisor</span></div></li>`:''}
           ${md?`<li><div class="prow static"><span class="code">Med</span><span class="pname">${esc(md)}</span><span class="pwhere">Medical</span></div></li>`:''}
           ${off.length?`<li><div class="prow static"><span class="code">OFF</span><span class="pname muted" style="font-weight:400">${esc(off.map(m=>m.name).join(', '))}</span></div></li>`:''}</ul>
         <p class="hint">Tap a post to swap or lock someone. <span class="dot inline"></span> = armed.</p>
@@ -410,6 +415,12 @@ function handlesSvg(s){
   return `<g id="handles">${h}</g>`;
 }
 
+function supHtml(w){
+  if(!S.supervisors.length) return `<div class="card"><strong>Floor supervisor</strong><p class="hint">No floor supervisors yet. Add them under Roster, then pick who’s on duty here.</p></div>`;
+  const sel=svc=>{ const cur=(w.sup&&w.sup[svc])||''; const act=S.supervisors.filter(m=>m.active!==false||m.id===cur);
+    return `<label class="field"><span>${SVC_NAME[svc]} (${svc})</span><select id="sup-sel-${svc}" data-svc="${svc}" ${S.canWrite?'':'disabled'}><option value="">— Not set —</option>${act.map(m=>`<option value="${m.id}" ${m.id===cur?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>`; };
+  return `<div class="card"><strong>Floor supervisor</strong><div class="grid2">${SVCS.map(sel).join('')}</div></div>`;
+}
 function medHtml(w){
   if(!S.medics.length) return `<div class="card"><strong>Medical</strong><p class="hint">No medical team yet. Add them under Roster, then pick who’s on medical here.</p></div>`;
   const sel=svc=>{ const cur=(w.med&&w.med[svc])||''; const act=S.medics.filter(m=>m.active!==false||m.id===cur);
@@ -548,6 +559,8 @@ function viewRoster(v){
     <div class="stats"><div class="stat"><div class="k">Armed</div><div class="v">${armed} of ${act.length}</div></div><div class="stat"><div class="k">Medical team</div><div class="v">${S.medics.filter(m=>m.active!==false).length}</div></div></div>
     <div class="stats">${QUALS.map(([k,full])=>`<div class="stat"><div class="k">${full}</div><div class="v">${act.filter(m=>m[k]).length} of ${act.length}</div></div>`).join('')}</div>
     ${S.members.length?`<ul class="list">${act.map(row).join('')}${ina.map(row).join('')}</ul>`:emptyBox('No team members yet','Add each person on the security team and mark who carries.','Add member','member','')}
+    <div class="sec-head"><h2 class="sec">Floor supervisors · ${S.supervisors.filter(m=>m.active!==false).length}</h2>${S.canWrite?'<button class="btn" data-act="supv" data-v="">Add</button>':''}</div>
+    ${S.supervisors.length?`<ul class="list">${S.supervisors.map(m=>`<li><button class="row tap${m.active===false?' dim':''}" data-act="supv" data-v="${m.id}"><span class="main"><span class="name">${esc(m.name)}</span>${m.active===false?'<span class="tags"><span class="tag">Inactive</span></span>':''}</span><span class="muted" aria-hidden="true">›</span></button></li>`).join('')}</ul>`:'<p class="hint">Add your floor supervisors here, then pick who’s on duty each Sunday.</p>'}
     <div class="sec-head"><h2 class="sec">Medical team · ${S.medics.filter(m=>m.active!==false).length}</h2>${S.canWrite?'<button class="btn" data-act="medic" data-v="">Add</button>':''}</div>
     ${S.medics.length?`<ul class="list">${S.medics.map(m=>`<li><button class="row tap${m.active===false?' dim':''}" data-act="medic" data-v="${m.id}"><span class="main"><span class="name">${esc(m.name)}</span>${m.active===false?'<span class="tags"><span class="tag">Inactive</span></span>':''}</span><span class="muted" aria-hidden="true">›</span></button></li>`).join('')}</ul>`:'<p class="hint">Medical is its own team. Add them here, then pick who’s on medical each Sunday.</p>'}
     <p class="hint">Armed status shows only inside this app. It’s never in the copied schedule. Inactive members stay in history but aren’t scheduled.</p>
@@ -646,10 +659,12 @@ function openMemberSheet(id){
   });
 }
 
-function openMedicSheet(id){
+function openSupervisorSheet(id){ openSimplePersonSheet('supervisors', S.supervisors, id, 'floor supervisor'); }
+function openMedicSheet(id){ openSimplePersonSheet('medics', S.medics, id, 'medical member'); }
+function openSimplePersonSheet(coll, list, id, noun){
   if(!guard()) return;
-  const m=S.medics.find(x=>x.id===id)||{name:'',active:true};
-  openSheet(id?'Edit medical member':'Add medical member', `
+  const m=list.find(x=>x.id===id)||{name:'',active:true};
+  openSheet((id?'Edit ':'Add ')+noun, `
     <label class="field"><span>Name</span><input type="text" id="md-name" value="${esc(m.name)}" autocomplete="off"></label>
     <div class="checks">${chk('md-active','Active',m.active!==false)}</div>
     <div class="actions"><button class="btn" data-act="close">Cancel</button><button class="btn primary" id="md-save">Save</button></div>
@@ -657,8 +672,8 @@ function openMedicSheet(id){
   body=>{
     body.querySelector('#md-save').onclick=async()=>{ const name=body.querySelector('#md-name').value.trim(); if(!name){ toast('Enter a name.'); return; }
       const data={name, active:body.querySelector('#md-active').checked, updatedAt:Date.now()};
-      if(await write(()=>id?S.db.doc('medics/'+id).set(data):S.db.collection('medics').add(data))){ closeSheet(); toast('Saved.'); } };
-    const d=body.querySelector('#md-del'); if(d) d.onclick=()=>armConfirm(d,async()=>{ if(await write(()=>S.db.doc('medics/'+id).delete())){ closeSheet(); toast('Deleted.'); } });
+      if(await write(()=>id?S.db.doc(coll+'/'+id).set(data):S.db.collection(coll).add(data))){ closeSheet(); toast('Saved.'); } };
+    const d=body.querySelector('#md-del'); if(d) d.onclick=()=>armConfirm(d,async()=>{ if(await write(()=>S.db.doc(coll+'/'+id).delete())){ closeSheet(); toast('Deleted.'); } });
   });
 }
 function openPostSheet(id){
@@ -842,6 +857,7 @@ const ACTS={
   editmap:()=>{ S.editMap=!S.editMap; S.selSec=null; S.selPt=null; if(!S.editMap) flushLayout(); render(); },
   member:el=>openMemberSheet(el.dataset.v),
   medic:el=>openMedicSheet(el.dataset.v),
+  supv:el=>openSupervisorSheet(el.dataset.v),
   post:el=>openPostSheet(el.dataset.v),
   notes:()=>openNotesSheet(),
   rules:()=>openRulesSheet(),
@@ -940,7 +956,7 @@ const TOUR=[
   {tab:'sunday', mode:'avail', target:()=>q1('.steps'), title:'Two steps', text:'Step 1 is availability. Step 2 is the schedule and sharing it.'},
   {tab:'sunday', mode:'avail', target:()=>q1('.arow .seg4'), title:'Mark availability', text:'After asking in the group chat, tap Out, AM, PM, or Both for each person. Anyone not marked stays at the top under “Waiting on.”'},
   {tab:'sunday', mode:'avail', target:()=>q1('.arow .aname'), title:'Requests', text:'Tap a name if that person asked for a specific post. A brown dot means they’re armed. Key, door app, gate app, and medical training show under the name.'},
-  {tab:'sunday', mode:'avail', target:()=>{ const s=q1('select[id^="med-sel-"]'); return s?s.closest('.card'):null; }, title:'Medical', text:'Choose who’s on medical for the morning and evening. The medical team is managed on the Roster tab.'},
+  {tab:'sunday', mode:'avail', target:()=>{ const s=q1('select[id^="sup-sel-"]')||q1('select[id^="med-sel-"]'); return s?s.closest('.card'):null; }, title:'Floor supervisor and medical', text:'Choose the floor supervisor and who’s on medical for the morning and evening. Both lists are managed on the Roster tab.'},
   {tab:'sunday', mode:'avail', target:()=>q1('button.big[data-act="gen"]'), title:'Generate', text:'When everyone’s marked, tap Generate. Armed posts are filled first, then everyone else rotates so people don’t get the same post every week.'},
   {tab:'sunday', mode:'sched', target:()=>q1('.list .prow')||q1('.steps button[data-v="sched"]'), title:'Check the schedule', text:'Step 2 shows each post and who’s on it. Switch Morning and Evening at the top. Tap any post to swap the person or lock them in place.'},
   {tab:'sunday', mode:'sched', target:()=>q1('.warns')||q1('.okline'), title:'Warnings', text:'Green means every post is filled and armed coverage is met. Anything that needs fixing shows here in red.'},
@@ -1023,6 +1039,7 @@ export function start(ctx){
   render();
   const db=S.db;
   db.collection('members').onSnapshot(snap=>{ S.members=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'')); S.loaded.members=true; render(); if(!S.tourChecked&&S.loaded.posts){ S.tourChecked=true; maybeAutoTour(); } }, onErr);
+  db.collection('supervisors').onSnapshot(snap=>{ S.supervisors=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'')); render(); }, onErr);
   db.collection('medics').onSnapshot(snap=>{ S.medics=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||'')); render(); }, onErr);
   db.collection('posts').onSnapshot(snap=>{ S.posts=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order??99)-(b.order??99)); S.loaded.posts=true; render(); if(!S.tourChecked&&S.loaded.members){ S.tourChecked=true; maybeAutoTour(); } }, onErr);
   db.doc('settings/team').onSnapshot(snap=>{ S.settings=snap.exists?snap.data():{}; render(); }, onErr);

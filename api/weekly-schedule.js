@@ -45,13 +45,13 @@ export default async function handler(req, res) {
     const hasSched = w && w.sched && Object.values(w.sched).some((s) => s && Object.values(s).some(Boolean));
     if (!w || !w.final || !hasSched) return say(200, !w || !hasSched ? `No schedule has been generated for ${week} yet.` : `The ${week} schedule isn’t marked final yet. Tap “Mark final” on the Schedule step.`);
 
-    const dr = await fetch(`${base}/rest/v1/docs?coll=in.(members,medics,posts,settings)&select=path,doc_id,coll,data`, { headers });
+    const dr = await fetch(`${base}/rest/v1/docs?coll=in.(members,medics,supervisors,posts,settings)&select=path,doc_id,coll,data`, { headers });
     if (!dr.ok) return say(502, 'Supabase refused the request (' + dr.status + '). Check that SUPABASE_SERVICE_ROLE_KEY is the secret key, not the publishable one.');
     const rows = await dr.json();
     const list = (c) => rows.filter((r) => r.coll === c).map((r) => ({ id: r.doc_id, ...r.data }));
     const map = (rows.find((r) => r.path === 'settings/map') || {}).data;
 
-    const { svg } = buildScheduleSvg({ week: { ...w, date: week }, members: list('members'), medics: list('medics'), posts: list('posts'), layout: map });
+    const { svg } = buildScheduleSvg({ week: { ...w, date: week }, members: list('members'), medics: list('medics'), supervisors: list('supervisors'), posts: list('posts'), layout: map });
     const png = new Resvg(svg, { font: { fontFiles: FONTS, loadSystemFonts: false, defaultFontFamily: 'IBM Plex Sans' } }).render().asPng();
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', `inline; filename="security-schedule-${week}.png"`);

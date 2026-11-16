@@ -38,13 +38,15 @@ function fmtDate(s) {
   return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-export function buildScheduleSvg({ week, members, medics, posts, layout }) {
+export function buildScheduleSvg({ week, members, medics, supervisors, posts, layout, style = 'full' }) {
+  if (style === 'table') return buildTableSvg({ week, members, medics, supervisors, posts });
   const w = week || {};
   const L = layout && layout.v === 2 && Array.isArray(layout.shapes) ? layout : DEFAULT_LAYOUT;
   const mm = {}; (members || []).forEach((m) => { mm[m.id] = m; });
   const allPosts = [...(posts || [])].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
   const postsFor = (svc) => allPosts.filter((p) => (p.services || []).includes(svc));
   const medicName = (svc) => { const id = w.med && w.med[svc]; const m = id && (medics || []).find((x) => x.id === id); return m ? m.name : ''; };
+  const supName = (svc) => { const id = w.sup && w.sup[svc]; const m = id && (supervisors || []).find((x) => x.id === id); return m ? m.name : ''; };
   const DEF = { '1': [76, 154], '2': [144, 156], '3': [236, 156], '4': [304, 154], '5': [140, 257], '6': [240, 257] };
   const order = ['room', 'stage', 'section', 'fixture', 'door'];
   const shapes = [...L.shapes].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
@@ -79,7 +81,9 @@ export function buildScheduleSvg({ week, members, medics, posts, layout }) {
       seats.forEach((p) => { const d = DEF[p.code] || [190, 160]; const yy = (p.y ?? d[1]) + 32; if (yy > maxY) maxY = yy; });
       out += `<g transform="translate(0 ${y})">${drawShapes}${mk}</g>`; y += Math.min(VB.h, maxY + 6);
     }
-    ps.forEach((p) => { const m = mm[sched[p.id]]; rule(); out += chip(label(p)) + T(58, y, m ? m.name : 'Open', 13, 700, m ? COL.ink : COL.mkEmpty); });
+    ps.filter((p) => style !== 'compact' || !p.seat).forEach((p) => { const m = mm[sched[p.id]]; rule(); out += chip(label(p)) + T(58, y, m ? m.name : 'Open', 13, 700, m ? COL.ink : COL.mkEmpty); });
+    const sp = supName(svc);
+    if (sp) { rule(); out += chip('Sup') + T(58, y, sp, 13, 700); }
     const md = medicName(svc);
     if (md) { rule(); out += chip('Med') + T(58, y, md, 13, 700); }
     const used = new Set(Object.values(sched));
@@ -88,6 +92,57 @@ export function buildScheduleSvg({ week, members, medics, posts, layout }) {
     y += 12;
   });
   y += 16;
+  const H = Math.ceil(y), SC = 3;
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${VB.w * SC}" height="${H * SC}" viewBox="0 0 ${VB.w} ${H}"><rect width="${VB.w}" height="${H}" fill="${COL.bg}"/>${out}</svg>`, count: svcs.length };
+}
+
+// Compact table: no map. One row per post, Morning and Evening side by side.
+function buildTableSvg({ week, members, medics, supervisors, posts }) {
+  const w = week || {};
+  const mm = {}; (members || []).forEach((m) => { mm[m.id] = m; });
+  const all = [...(posts || [])].sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
+    .filter((p) => SVCS.some((sv) => (p.services || []).includes(sv)));
+  const has = (sv) => Object.values((w.sched && w.sched[sv]) || {}).some(Boolean);
+  const svcs = SVCS.filter(has);
+  const medicName = (svc) => { const id = w.med && w.med[svc]; const m = id && (medics || []).find((x) => x.id === id); return m ? m.name : ''; };
+  const T = (x, yy, txt, size, weight, fill, anchor) => `<text x="${x}" y="${yy}" font-family="${F}" font-size="${size}" font-weight="${weight || 400}" fill="${fill || COL.ink}"${anchor ? ` text-anchor="${anchor}"` : ''}>${esc(txt)}</text>`;
+  const X0 = 16, XC = 70, colW = (VB.w - XC - 16) / Math.max(1, svcs.length);
+  let y = 26, out = T(X0, y, 'Security posts · ' + fmtDate(w.date), 16, 700);
+  y += 22;
+  out += `<rect x="0" y="${y - 16}" width="${VB.w}" height="24" fill="${COL.chip}"/>` + T(X0, y, 'Post', 11, 700, COL.muted);
+  svcs.forEach((sv, i) => { out += T(XC + i * colW, y, SVC_NAME[sv].toUpperCase(), 11, 700, COL.muted); });
+  const row = (code, cells, shade) => {
+    y += 24;
+    if (shade) out += `<rect x="0" y="${y - 16}" width="${VB.w}" height="24" fill="#F6F8F6"/>`;
+    out += `<rect x="${X0}" y="${y - 13}" width="40" height="18" rx="4" fill="${COL.chip}"/>` + T(X0 + 20, y, code, 11, 700, COL.ink, 'middle');
+    cells.forEach((c, i) => { if (c) out += T(XC + i * colW, y, c.text, 13, c.bold === false ? 400 : 700, c.open ? COL.mkEmpty : c.muted ? COL.muted : COL.ink); });
+  };
+  let k = 0;
+  all.forEach((p) => {
+    const cells = svcs.map((sv) => {
+      if (!(p.services || []).includes(sv)) return { text: '—', muted: true, bold: false };
+      const m = mm[(w.sched && w.sched[sv] || {})[p.id]];
+      return m ? { text: m.name } : { text: 'Open', open: true };
+    });
+    row(label(p), cells, k++ % 2);
+  });
+  const supName = (svc) => { const id = w.sup && w.sup[svc]; const m = id && (supervisors || []).find((x) => x.id === id); return m ? m.name : ''; };
+  if (svcs.some((sv) => supName(sv))) row('Sup', svcs.map((sv) => ({ text: supName(sv) || '—', muted: !supName(sv), bold: !!supName(sv) })), k++ % 2);
+  if (svcs.some((sv) => medicName(sv))) row('Med', svcs.map((sv) => ({ text: medicName(sv) || '—', muted: !medicName(sv), bold: !!medicName(sv) })), k++ % 2);
+  const offs = svcs.map((sv) => {
+    const used = new Set(Object.values((w.sched && w.sched[sv]) || {}));
+    return (members || []).filter((mb) => mb.active !== false && w.avail && w.avail[mb.id] && w.avail[mb.id][sv] && !used.has(mb.id)).map((mb) => mb.name);
+  });
+  if (offs.some((o) => o.length)) {
+    const lines = offs.map((o) => wrapText(o.join(', ') || '—', Math.floor(colW / 7)));
+    const n = Math.max(...lines.map((l) => l.length));
+    y += 24; const top = y;
+    if (k % 2) out += `<rect x="0" y="${y - 16}" width="${VB.w}" height="${24 + (n - 1) * 15}" fill="#F6F8F6"/>`;
+    out += `<rect x="${X0}" y="${y - 13}" width="40" height="18" rx="4" fill="${COL.chip}"/>` + T(X0 + 20, y, 'OFF', 11, 700, COL.ink, 'middle');
+    lines.forEach((ls, i) => ls.forEach((ln, j) => { out += T(XC + i * colW, top + j * 15, ln, 12, 400); }));
+    y = top + (n - 1) * 15;
+  }
+  y += 22;
   const H = Math.ceil(y), SC = 3;
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${VB.w * SC}" height="${H * SC}" viewBox="0 0 ${VB.w} ${H}"><rect width="${VB.w}" height="${H}" fill="${COL.bg}"/>${out}</svg>`, count: svcs.length };
 }
